@@ -1,0 +1,143 @@
+#!/bin/bash
+#######################################################
+# Program: To check elastic cluster health
+#
+# Purpose:
+#  This script extracts elastic cluster active shards
+#  percentage using API
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#######################################################
+
+# Set script name
+#######################################################
+SCRIPTNAME=$(basename $0)
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# Usage details
+#######################################################
+
+if [ "${1}" = "--help" -o "${#}" != "12" ];
+then
+echo -e "
+        OPTION                      DESCRIPTION
+        --------------------------------------------------
+        --help                      Help
+         -u [username]              Elastic username
+         -p [password]              Elastic password
+        -ws [shard warn]            shard warning value
+        -cs [shard crit]            shard critical value
+        -wh [health warn]           health warning value
+        -ch [health critical]       health critical value
+        --------------------------------------------------
+        USAGE: sh check_elastic_cluster_health -u [username] -p [password] -ws [shard warning] -cs [shard critical] -wh [health warning] -ch [health critical]
+        Ex:  sh check_elastic_cluster_health -u logmaster -p STRONGPASSWD -ws 5 -cs 10 -wh 80 -ch 60
+	NOTE: Warning and Critical threshold must be Interger."
+	exit 3;
+fi
+
+#########################################################
+# Get user-given variables
+#########################################################
+
+while (( $# )); do
+
+        case "$1" in
+        -u|--username)
+        USERNAME=$2
+        ;;
+        -p|--password)
+        PASSWORD=$2
+        ;;
+        -ws|--warnshards)
+        WARNSHARD=$2
+        ;;
+        -cs|--critshards)
+        CRITSHARD=$2
+        ;;
+        -wh|--warnhealth)
+        WARNHEALTH=$2
+        ;;
+        -ch|--crithealth)
+        CRITHEALTH=$2
+        ;;
+        -h|--help)
+        USAGE: ./check_elastic_cluster_health -u [username] -p [password] -ws [shard warning] -cs [shard critical] -wh [health warning] -ch [health critical]
+        exit 3
+        ;;
+        esac
+        shift
+done
+
+
+# Unassigned shard threshold comparision
+######################################################
+
+if [ $WARNSHARD -gt $CRITSHARD ]
+then
+        echo "Warning threshold is greater than Critical threshold for unassigned shard."
+        exit 3;
+fi
+
+# Active shard health % threshold comparision
+######################################################
+
+if [ $WARNHEALTH -lt $CRITHEALTH ]
+then
+        echo "Warning threshold is less than Critical threshold for active shard health %."
+        exit 3;
+fi
+
+# Command to calculate active shards %
+#######################################################
+CMD="curl -Ss -XGET -k -u $USERNAME:$PASSWORD"
+
+SHARDS_PER=`$CMD "http://localhost:9200/_cluster/health" | python -m json.tool | grep -w "active_shards_percent_as_number" | awk '{print $2}' | sed 's/,$//' |  cut -d. -f1 `
+
+# Command to caluclate unassigned shards count
+#######################################################
+UNASSIGNEDSHARDS=`$CMD "http://localhost:9200/_cat/shards?h=index,shard,prirep,state,unassigned.reason" | egrep "UNASSIGNED" | wc -l`
+
+#######################################################
+OUTPUT="Clusterhealth=$SHARDS_PER%, Unassignedshard=$UNASSIGNEDSHARDS | Unassignedshard=${UNASSIGNEDSHARDS};$WARNSHARD;$CRITSHARD;0; Clusterhealth=${SHARDS_PER}"%";$WARNHEALTH;$CRITHEALTH;0; "
+#######################################################
+
+if [ "$SHARDS_PER" -gt "$WARNHEALTH" -o $UNASSIGNEDSHARDS -lt $WARNSHARD ]
+then
+        STATUS="OK";
+        EXITSTAT=0;
+
+elif [ "$SHARDS_PER" -lt "$WARNHEALTH" -o $UNASSIGNEDSHARDS -gt $WARNSHARD ]
+        then
+                if [ "$SHARDS_PER" -le "$CRITHEALTH"  -o $UNASSIGNEDSHARDS -gt $CRITSHARD ]
+                then
+                        STATUS="CRITICAL";
+                        EXITSTAT=2;
+                else
+                        STATUS="WARNING";
+                        EXITSTAT=1;
+                fi
+else
+        STATUS="UNKNOWN";
+        EXITSTAT=3;
+fi
+
+if [ "$STATUS" = "UNKNOWN" ]
+then
+        echo "$STATUS - No data Found."
+else
+       	echo "$STATUS - $OUTPUT"
+fi
+
+exit $EXITSTAT
+
+
+# End main logic.
+#######################################################
+
+

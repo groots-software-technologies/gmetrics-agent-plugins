@@ -1,0 +1,114 @@
+#!/bin/bash
+#######################################################
+# Program: To check current shards out of total shards on
+# node using elastic API
+#
+# Purpose:
+#  This script extracts total and current available shards
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Set script name
+#######################################################
+SCRIPTNAME=$(basename $0)
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# Usage details.
+#########################################################
+
+if [ "${1}" = "--help" -o "${#}" != "8" ];
+then
+echo -e "
+        OPTION                   DESCRIPTION
+        -----------------------------------------
+        --help                   Help
+        -w [Warning]             Warning threshold
+        -c [Critical]            Critical threshold
+        -u [username]            Elastic username
+        -p [Password]            Elastic password
+        -----------------------------------------
+	Usage: ./$SCRIPTNAME -u logmaster -p STRONGPASSWORD -w 800 -c 1000
+	NOTE: Warning and Critical threshold must be Interger."
+	exit 3;
+fi
+
+
+#########################################################
+# Get user-given variables
+#########################################################
+
+while getopts "u:p:w:c:" Input;
+do
+        case ${Input} in
+                u) USERNAME=${OPTARG};;
+                p) PASSWORD=${OPTARG};;
+                w) WARN=${OPTARG};;
+                c) CRIT=${OPTARG};;
+                *) echo "Usage: $SCRIPTNAME -u logmaster -p STRONGPASSWORD -w 800 -c 1000"
+        exit 3;
+        ;;
+        esac
+done
+
+# Compairing warning and critical thesholds
+#######################################################
+
+if [ $WARN -gt $CRIT ]
+then
+        echo "CRITICAL threshold value is less than WARNING threshold."
+        exit 3;
+fi
+
+# Commands to calculate current and max shards using API
+#######################################################
+
+AUTH_CMD="curl -Ss -XGET -k -u $USERNAME:$PASSWORD"
+
+CURRENT_SHARDS=`$AUTH_CMD "http://localhost:9200/_cat/allocation?v" | tail -n 1 | awk '{print $1}'`
+CLUSTER_DEFAULT_SHARDS=`$AUTH_CMD "http://localhost:9200/_cluster/settings" | python -m json.tool | egrep "max_shards_per_node"  | awk '{print $2}' | sed 's/"$//' | sed  's/^.\(.*\)/\1/' `
+
+#########################################################
+OUTPUT="ClusterNodeShards=$CLUSTER_DEFAULT_SHARDS, Indexshardscount=$CURRENT_SHARDS | ClusterNodeShards=${CLUSTER_DEFAULT_SHARDS};;;; Indexshardscount=${CURRENT_SHARDS};;;;"
+#########################################################
+
+if [ "$CURRENT_SHARDS" -le "$WARN" ]
+then
+	STATUS="OK";
+	EXITSTAT=0;
+
+	elif [ "$CURRENT_SHARDS" -gt "$WARN" ]
+	then
+		if [ "$CURRENT_SHARDS" -gt "$CRIT" ]
+		then
+			STATUS="CRITICAL";
+			EXITSTAT=2;
+		else
+			STATUS="WARNING";
+			EXITSTAT=1;
+		fi
+else
+	STATUS="UNKNOWN";
+	EXITSTAT=3;
+fi
+
+if [ "$STATUS" = "UNKNOWN" ]
+then
+        echo "$STATUS - No data Found."
+else
+		echo "$STATUS - $OUTPUT"
+fi
+
+exit $EXITSTAT
+
+# End main logic
+#########################################################
+
+

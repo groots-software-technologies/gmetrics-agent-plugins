@@ -1,0 +1,147 @@
+#!/bin/bash
+#######################################################
+# Program: To check jenkins job status of last built
+#
+# Purpose:
+#  This script extracts test results of jenkins jobs
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+########################################################
+
+# Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+
+# type command is checking whether jq command present or not.
+#######################################################
+
+# check pre-requisite for fetch AWS cloud watch metrics, below packages must install without this plugin won't run.
+
+type jq >/dev/null 2>&1 || { echo >&2 "This plugin require "jq" package, but it's not installed. Aborting."; exit 1; }
+
+
+# Usage details.
+#########################################################
+
+if [ "${1}" = "--help" -o "${#}" != "10" ];
+then
+echo "
+        Usage: ./$SCRIPTNAME -e "[end point url]" -u [jenkins user] -p [password] -w [warning threshold] -c [critical threshold]
+
+        OPTION                   DESCRIPTION
+        -----------------------------------------
+        --help                   Help
+        -e [end point]           Jenkins url
+        -u [username]            Jenkins username
+        -p [password]            Jenkins password
+        -w [warning]             Warning value
+        -c [critical]            Critical value
+        -----------------------------------------
+        Ex: ./$SCRIPTNAME -e "http://example.com" -u admin -p [Strongpassword] -w 2 -c 4
+
+        NOTE: admin password should be strong and have read only permission.
+        ";
+        exit 3;
+fi
+
+#########################################################
+# Get user-given variables
+#########################################################
+
+while getopts "e:u:p:w:c:" Input;
+  do
+    case ${Input} in
+    e) ENDPOINT=${OPTARG};;
+    u) USER=${OPTARG};;
+    p) PASSWORD=${OPTARG};;
+    w) WARN=${OPTARG};;
+    c) CRIT=${OPTARG};;
+    *) echo "Usage: $SCRIPTNAME -e "[end point url]" -u [jenkins user] -p [password] -w [warning threshhold] -c [critical threshhold]"
+    exit 3;
+    ;;
+    esac
+done
+
+# Main logic
+#######################################################
+
+# Initialise count variable
+#######################################################
+
+SUCCESS_COUNT=0
+FAILED_COUNT=0
+UNSTABLE_COUNT=0
+TOTAL_COUNT=0
+
+# To get all jobs name
+#######################################################
+
+COMMAND="curl -g -s -XGET -u $USER:"$PASSWORD" "$ENDPOINT""
+
+JOBS_ARRAY=`$COMMAND/api/json\?tree\=jobs\[name\] | jq -r '.jobs[].name'`
+
+# Initiate loop - To get the status of the job
+#######################################################
+
+for JOB in $JOBS_ARRAY
+do
+
+        RESULTS=`$COMMAND/job/$JOB/lastBuild/api/json | jq -r '.result'`
+
+        if [ "$RESULTS" = "SUCCESS" ]; then
+                SUCCESS_COUNT=`expr $SUCCESS_COUNT + 1`
+        fi
+
+        if [ "$RESULTS" = "FAILURE" ]; then
+                FAILED_COUNT=`expr $FAILED_COUNT + 1`
+        fi
+
+        if [ "$RESULTS" = "UNSTABLE" ]; then
+                UNSTABLE_COUNT=`expr $FAILED_COUNT + 1`
+        fi
+
+        TOTAL_COUNT=`expr $TOTAL_COUNT + 1`
+
+done
+
+#########################################################
+OUTPUT="Total jenkins jobs=$TOTAL_COUNT, Successful=$SUCCESS_COUNT, Failed=$FAILED_COUNT and Unstable=$UNSTABLE_COUNT |Unstable=$UNSTABLE_COUNT;;;; Failed=$FAILED_COUNT;;;; Success=$SUCCESS_COUNT;;;; Total=$TOTAL_COUNT;;;; "
+#########################################################
+
+if [ "$FAILED_COUNT" -le "$WARN" ]
+then
+        STATUS="OK";
+        EXITSTAT=0;
+
+        elif [ "$FAILED_COUNT" -gt "$WARN" ]
+        then
+                if [ "$FAILED_COUNT" -gt "$CRIT" ]
+                then
+                        STATUS="CRITICAL";
+                        EXITSTAT=2;
+                else
+                        STATUS="WARNING";
+                        EXITSTAT=1;
+                fi
+else
+        STATUS="UNKNOWN";
+        EXITSTAT=3;
+fi
+
+if [ "$STATUS" = "UNKNOWN" ]
+then
+        echo "$STATUS - No data Found."
+else
+        echo "$STATUS - $OUTPUT"
+fi
+
+exit $EXITSTAT
+
+# End main logic
+#######################################################
+

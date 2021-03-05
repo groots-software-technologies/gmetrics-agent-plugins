@@ -1,0 +1,174 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check server health and process using gmetrics plugins.
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# Usage Details
+#######################################################
+
+if [ "${1}" = "--help" -o "${#}" != "4" ]
+       then
+       echo -e "Usage: $SCRIPTNAME -s [Service Name] -u [User Name]
+
+        OPTION          DESCRIPTION
+        ----------------------------------
+        --help              Help
+        -s              Service Name
+        -u              User Name
+        ----------------------------------
+
+        Usage: ./$SCRIPTNAME -s iptables -u root
+        "
+        exit 3;
+fi
+
+# Get user-given variables
+#######################################################
+
+while getopts "s:u:" options
+do
+    case $options in
+        s ) SERVICE=$OPTARG ;;
+	u ) USERNAME=$OPTARG ;;
+        * ) help
+            exit 3 ;;
+    esac
+done
+
+#######################################################
+# Main Logic
+#######################################################
+
+if [ -z $SERVICE ]
+ then
+            SERVICETOOL="service $SERVICE status"
+ elif [ $USERNAME ]; then
+            SERVICETOOL="sudo -u $USERNAME /opt/lampp/$SERVICE/scripts/ctl.sh status"
+fi
+                
+#######################################################
+STATUS_MSG=$(eval "$SERVICETOOL|tail -n 1" 2>&1)
+#######################################################
+
+case $STATUS_MSG in
+
+*stop*)
+        echo "$SERVICE Stopped |$SERVICE=3"c";2;3"
+        STATUS="CRITICAL"
+	EXIT=2
+        ;;
+*Stopped*)
+        echo "$SERVICE Stopped |$SERVICE=3"c";2;3"
+        EXIT=2
+	STATUS="CRITICAL"
+        ;;
+*not*running*)
+        echo "$SERVICE Stopped |$SERVICE=3"c";2;3"
+        EXIT=2
+	STATUS="CRITICAL"
+	;;
+*running*)
+        echo "$SERVICE Running |$SERVICE=0"c";2;3"
+        EXIT=0 
+	STATUS="OK"
+        ;;
+*Running*)
+        echo "$SERVICE Running |$SERVICE=0"c";2;3"
+        EXIT=0 
+	STATUS="OK"
+        ;;
+*SUCCESS*)
+        echo "$SERVICE Running |$SERVICE=0"c";2;3"
+        EXIT=0 
+	STATUS="OK"
+        ;;
+*[eE]rr*)
+        echo "Error in command: $STATUS_MSG|$SERVICE=2"c";2;3"
+        EXIT=1
+	STATUS="WARNING"
+        ;;
+*[fF]ailed*)
+        echo "$STATUS_MSG |$SERVICE=2"c";2;3"
+        EXIT=1
+	STATUS="WARNING"
+        ;;
+*[eE]nable*)
+        echo "$SERVICE Running |$SERVICE=0"c";2;3"
+        EXIT=0 
+	STATUS="OK"
+        ;;
+*[dD]isable*)
+        echo "$SERVICE Stopped |$SERVICE=3"c";2;3"
+        EXIT=2
+	STATUS="CRITICAL"
+        ;;
+*[cC]annot*)
+        echo "$STATUS_MSG |$SERVICE=2"c";2;3"
+        EXIT=1
+	STATUS="WARNING"
+        ;;
+*inactive*)
+        echo "$SERVICE Stopped |$SERVICE=3"c";2;3"
+        EXIT=2
+	STATUS="CRITICAL"
+        ;;
+*dead*)
+        echo "$STATUS_MSG |$SERVICE=2"c";2;3"
+        EXIT=1
+	STATUS="WARNING"
+        ;;
+*[aA]ctive*)
+        echo "$SERVICE Running |$SERVICE=0"c";2;3"
+        EXIT=0
+	STATUS="OK"
+        ;;
+*Subsystem*not*on*file)
+        echo "$STATUS_MSG |$SERVICE=2"c";2;3"
+        EXIT=1
+	STATUS="WARNING"
+        ;;
+[1-9][1-9]*)
+        echo "$SERVICE Running: $STATUS_MSG|$SERVICE=0"c";2;3"
+        EXIT=0
+	STATUS="OK"
+        ;;
+"")
+	echo "$SERVICE is not Running: no output from service command|$SERVICE=3"c";2;3"
+	EXIT=2
+	STATUS="CRITICAL"
+	;;
+*command*not*found)
+        echo "Is there a typo in the command or service configuration file not present?: $STATUS_MSG | '$SERVICE'=3"c";2;3"
+        EXIT=3
+        STATUS="UNKNOWN"
+        ;;
+*)
+        echo "Is there a typo in the command or service configuration?: $STATUS_MSG | '$SERVICE'=3"c";2;3"
+        EXIT=3
+	STATUS="UNKNOWN"
+        ;;
+esac
+
+exit $EXIT
+# End Main Logic.
+#######################################################

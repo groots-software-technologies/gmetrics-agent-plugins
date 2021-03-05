@@ -1,0 +1,126 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring Node plugins
+#
+# Purpose:
+#  To monitor node process cpu and uptime
+#  It collects all data from process id.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Usage details
+#######################################################
+
+if [ "${1}" = "--help" -o "${#}" != "4" ];
+       then
+       echo -e "
+        OPTION               DESCRIPTION
+        ----------------------------------
+        --help                  Help
+        -w [VALUE]      Warning Threshold Value in %
+        -c [VALUE]      Critical Threshold Value in %
+        ----------------------------------
+        Usage: ./$SCRIPTNAME -w [Warning Threshold] -c [Critical Threshold]
+        Note : [VALUE] must be an integer.";
+       exit 3;
+fi
+
+#######################################################
+# Get user-given variables
+#######################################################
+
+while getopts "w:c:" OPT
+do
+        case $OPT in
+        w) WARN="$OPTARG" ;;
+        c) CRIT="$OPTARG" ;;
+        *) echo "Usage: $SCRIPTNAME -w [Warning Threshold] -c [Critical Threshold]"
+        exit 3
+        ;;
+        esac
+done
+
+# To compare warning and critical thresholds value
+#######################################################
+
+if [ $WARN -gt $CRIT ]
+then
+        echo "Warning value must be less than Critical Value or Use Help --help"
+        exit 3
+else
+        WARN=$WARN
+fi
+
+# Main Function
+########################################################
+
+# To get values- pid,cpu%,mem% and uptime sorted by %cpu
+########################################################
+
+NODE_CMD=`ps -eo pid,%cpu,%mem,cmd,comm -o etimes --sort=-%cpu --no-header | egrep -i node | head -n1 | awk '{print $1 "," $2 "," $3 "," $NF}'`
+
+# To get the pid with highest %cpu
+#######################################################
+PID=`echo $NODE_CMD | cut -d ',' -f1`
+
+# To get highest %cpu value
+#######################################################
+CPU=`echo $NODE_CMD | cut -d ',' -f2`
+ICPU=`echo "$CPU" | awk -F "." '{print $1}'`
+
+# Current uptime of the node running
+#######################################################
+UPTIME=`echo $NODE_CMD | cut -d ',' -f4`
+
+# Converting uptime seconds to minute
+#######################################################
+
+UPTIME_MIN=$(($UPTIME / 60))
+UPTIME=`echo $((UPTIME/86400))" days "$(date -d "1970-01-01 + $UPTIME seconds" "+%H hours %M minutes %S seconds")`
+
+########################################################
+OUTPUT=`echo "NODE PID=$PID, Used CPU=${CPU}%, Process Uptime=$UPTIME_MIN Min | CPU=${ICPU}"%";$WARN;$CRIT;0; "`
+########################################################
+
+if [ "$ICPU" -lt "$WARN"  ]
+then
+        STATUS="OK";
+        EXIT=0;
+        elif [ "$ICPU" -ge "$WARN" ]
+        then
+                if [ "$ICPU" -ge "$CRIT" ]
+                then
+                STATUS="CRITICAL";
+                EXIT=2;
+                else
+                STATUS="WARNING";
+                EXIT=1;
+                fi
+else
+        STATUS="UNKNOWN";
+        EXIT=3;
+fi
+
+if [ "$STATUS" = "UNKNOWN" ]
+then
+        echo "$STATUS - No data Found."
+else
+	echo "$STATUS - $OUTPUT"
+fi
+
+exit $EXIT
+
+# End main logic.
+########################################################
+

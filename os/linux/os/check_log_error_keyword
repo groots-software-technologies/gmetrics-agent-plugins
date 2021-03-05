@@ -1,0 +1,141 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check server health and process using gmetrics plugins.
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# Usage Details
+#######################################################
+
+if [ "${1}" = "--help" -o "${#}" = "0" ];
+       then
+       echo -e "Usage: $SCRIPTNAME -p [FILE PATH] -k [ERROR KEYWORD] -w [VALUE] -c [VALUE]
+
+        OPTION          DESCRIPTION
+        ----------------------------------
+        --help                  Help
+        -w [VALUE]              Warning Threshold
+        -c [VALUE]              Critical Threshold
+        -p [FILE PATH]          Full File Path
+        -k [ERROR KEYWORD]      Error keyword
+        ----------------------------------
+
+        Use: ./$SCRIPTNAME -p \"/var/log/messages\" -k \"qq temp\" -w 50 -c 70
+
+Note : [VALUE] must be an integer.
+File path and Error keyword Should be in double quote";
+exit 3;
+fi
+
+#######################################################
+# Get user-given variables
+#######################################################
+while getopts "w:c:p:k:" Input;
+do
+       case ${Input} in
+       w) WARN=${OPTARG};;
+       c) CRIT=${OPTARG};;
+       p) INPUTFILE=${OPTARG};;
+       k) ERRORKEYWORD=${OPTARG};;
+       *) echo "Usage: $SCRIPTNAME -p [FILE PATH] -k [ERROR KEYWORD] -w [VALUE] -c [VALUE] or Use Help --help "
+               exit 3
+               ;;
+       esac
+done
+
+# Warning threshold should be less than Critical threshold.
+#######################################################
+if [ ${WARN} -gt ${CRIT} ]
+then
+        echo "ERROR : Warning threshold must be less than Critical threshold."
+        exit 3
+else
+        WARN=$WARN
+fi
+
+# Input file verify.
+#######################################################
+
+if [ -f "$INPUTFILE" ]
+then
+        FILE="$INPUTFILE"
+else
+        echo "$INPUTFILE: No such Input file or directory..."
+        echo "Usage: $SCRIPTNAME -p [FILE PATH] -k [ERROR KEYWORD] -w [VALUE] -c [VALUE] or Use Help --help "
+        exit 3
+fi
+
+# Input keyword does not empty.
+#######################################################
+if [ -z "$ERRORKEYWORD" ]
+then
+        echo "Please provide any input error keyword."
+        echo "Usage: $SCRIPTNAME -p [FILE PATH] -k [ERROR KEYWORD] -w [VALUE] -c [VALUE] or Use Help --help "
+        exit 3;
+else
+	ERRORKEYWORD=$ERRORKEYWORD
+fi
+
+#######################################################
+# Main Logic.
+#######################################################
+
+if [ "$FILE" == "$FILE" ]
+then
+        COUNT1=$(cat $FILE | egrep "$ERRORKEYWORD" | wc -l)
+fi
+
+if [ "$COUNT1" == "" ]
+then
+        COUNT="0";
+else
+        COUNT="$COUNT1"
+fi
+
+#######################################################
+OUTPUT="Error count is $COUNT"
+#######################################################
+if [ "$COUNT" -le "$WARN" ]
+then
+        STATUS="OK";
+        EXITSTAT=0;
+
+elif [ "$COUNT" -gt "$WARN" ]
+        then
+                if [ "$COUNT" -ge "$CRIT" ]
+                then
+                        STATUS="CRITICAL";
+                        EXITSTAT=2;
+                else
+                        STATUS="WARNING";
+                        EXITSTAT=1;
+                fi
+else
+        STATUS="UNKNOWN";
+        EXITSTAT=3;
+fi
+
+echo "$STATUS - $OUTPUT | ErrorCount=$COUNT;$WARN;$CRIT"
+
+exit $EXITSTAT
+#End main logic
+#######################################################

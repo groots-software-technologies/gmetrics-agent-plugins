@@ -1,0 +1,105 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check server health and process using gmetrics plugins.
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# type command is checking whether sysstat, sar command present or not.
+#######################################################
+type sar >/dev/null 2>&1 || { echo >&2 "This plugin require "sysstat" package, but it's not installed. Aborting."; exit 1; }
+
+# Usage Details
+#######################################################
+if [ "${1}" = "--help" -o "${#}" != "4" ]
+       then
+       echo -e "Usage: $SCRIPTNAME -w [VALUE] -c [VALUE]
+
+        OPTION          DESCRIPTION
+        ----------------------------------
+        -h              Help
+        -w [VALUE]      Warning Threshold Value in %
+        -c [VALUE]      Critical Threshold Value in %
+        ----------------------------------
+
+        Usage: ./$SCRIPTNAME -w 40 -c 50
+
+Note : [VALUE] must be an integer.";
+       exit 3;
+fi
+
+# Get user-given variables
+#######################################################
+
+while getopts "w:c:" OPT
+do
+        case $OPT in
+        w) warn="$OPTARG" ;;
+        c) crit="$OPTARG" ;;
+        *) echo -e "Usage: $SCRIPTNAME -w [VALUE] -c [VALUE]" ;;
+        esac
+done
+ 
+#######################################################
+if [ $warn -gt $crit ]
+then
+	echo -e "Usage: $SCRIPTNAME -w [VALUE] -c [VALUE]"
+        exit 3
+fi 
+
+#######################################################
+# Main Logic
+#######################################################
+
+SAR_OUTPUT=`sar 1 1 | grep -i average`
+IOWAIT=`echo $SAR_OUTPUT | awk '{print $6}'`
+INTIOWAIT=`echo $IOWAIT | awk -F "." '{print $1}'`
+
+#######################################################
+
+if [ "$INTIOWAIT" -lt "$warn" ]
+then
+    STATUS="OK";
+    EXIT=0;
+elif [ "$INTIOWAIT" -ge "$warn" ]
+then
+    if [ "$INTIOWAIT" -ge "$crit" ]
+    then
+    	STATUS="CRITICAL";
+	EXIT=2;
+    else
+    	STATUS="WARNING";
+    	EXIT=1;
+    fi
+else
+    STATUS="UNKNOWN";
+    EXIT=3;
+fi
+
+if [ $STATUS = "UNKNOWN" ]
+then
+	echo "$STATUS- No data" 
+else
+	echo "$STATUS- iowait=${IOWAIT}%|iowait=${IOWAIT}"%";$warn;$crit;0;100"
+fi
+exit $EXIT
+# End Main Logic.
+#######################################################

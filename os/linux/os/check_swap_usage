@@ -1,0 +1,116 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check server health and process using gmetrics plugins.
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# Usage Details
+#######################################################
+
+if [ "${1}" = "--help" -o "${#}" = "0" ];
+       then
+       echo -e "Usage: $SCRIPTNAME -w [VALUE] -c [VALUE]
+
+        OPTION          DESCRIPTION
+        ----------------------------------
+        --help              Help
+        -w [VALUE]      Warning Threshold in %
+        -c [VALUE]      Critical Threshold in %
+        ----------------------------------
+
+        Use: $SCRIPTNAME -w 50 -c 70
+
+Note : [VALUE] must be an integer.";
+       exit 3;
+fi
+
+# Get user-given variables
+#######################################################
+while getopts "w:c:" Input;
+do
+       case ${Input} in
+       w)      WARN=${OPTARG};;
+       c)      CRIT=${OPTARG};;
+       *)      echo "Usage: $SCRIPTNAME -w [VALUE] -c [VALUE] or Use Help --help "
+               exit 3
+               ;;
+       esac
+done
+
+#######################################################
+if [ ${WARN} -gt ${CRIT} ]
+then
+        echo "ERROR : Warning threshold must be less than Critical threshold."
+        exit 3
+else
+        WARN=$WARN
+fi
+
+#######################################################
+# Main Logic
+#######################################################
+
+TotalSwap=`free -m |grep "Swap" |awk -F ' ' '{print $2}'`
+Used=`free -m |grep "Swap" |awk -F ' ' '{print $3}'`
+Free=`free -m |grep "Swap" |awk -F ' ' '{print $4}'`
+Buffers=`free -m |grep "Swap" |awk -F ' ' '{print $6}'`
+Cached=`free -m |grep "Swap" |awk -F ' ' '{print $7}'`
+
+memTotal_b=$((TotalSwap*1024))
+memUsed_b=$(($Used*1024))
+memUsedPrc=$((($memUsed_b*100)/$memTotal_b))
+
+#######################################################
+if [ "$Buffers" == "" ] && [ "$Cached" == ""  ];
+then
+	Buffers="0"
+	Cached="0"
+fi
+
+#######################################################
+OUTPUT="TotalSwap=$TotalSwap"MB",Used=$Used"MB" - $memUsedPrc% | TotalSwap=$TotalSwap"MB";;;; Used=$Used"MB";;;; Free=$Free"MB";;;; Buffers=$Buffers"MB";;;; Cached=$Cached"MB";;;;"
+#######################################################
+
+if [ "$memUsedPrc" -le "$WARN" ]
+then
+        STATUS="OK";
+        EXITSTAT=0;
+
+elif [ "$memUsedPrc" -gt "$WARN" ]
+        then
+                if [ "$memUsedPrc" -ge "$CRIT" ]
+                then
+                        STATUS="CRITICAL";
+                        EXITSTAT=2;
+                else
+                        STATUS="WARNING";
+                        EXITSTAT=1;
+                fi
+else
+        STATUS="UNKNOWN";
+        EXITSTAT=3;
+fi
+
+echo "$STATUS - $OUTPUT"
+exit $EXITSTAT
+# End Main Logic.
+#######################################################

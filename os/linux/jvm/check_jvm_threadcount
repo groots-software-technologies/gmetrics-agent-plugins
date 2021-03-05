@@ -1,0 +1,96 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring java plugins
+#
+# Purpose:
+#  Checks jvm counts hightest thread count for java processs
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# Usage Details
+#######################################################
+
+if [ "${1}" = "--help" -o "${#}" != "4" ]; 
+then 
+echo -e "
+OPTION          DESCRIPTION
+----------------------------------
+--help              Help
+-w [VALUE]      Warning Threshold
+-c [VALUE]      Critical Threshold
+----------------------------------
+
+Use: ./$SCRIPTNAME -w [Warning Threshold] -c [Critical Threshold] "; 
+exit 3; 
+fi 
+
+# Get user-given variables 
+#######################################################
+while getopts "w:c:" Input 
+do 
+case ${Input} in 
+w)      WARN=${OPTARG};; 
+c)      CRIT=${OPTARG};; 
+*)      echo "Usage: $SCRIPTNAME -w [Warning Threshold] -c [Critical Threshold] or --help " 
+ exit 3; 
+ ;; 
+esac 
+done
+
+
+# Main Logic.
+#######################################################
+
+# Check Java process max thread count 
+#######################################################
+
+CMD=`ps axo nlwp,pid,cmd | sort -rn | grep java | grep -v grep | head -n1`
+THREADCOUNT=`echo $CMD | awk '{print $1}'`
+PID=`echo $CMD | awk '{print $2}'`
+#######################################################
+
+OUTPUT="JVM PID="$PID", Threads=$THREADCOUNT | Threads=$THREADCOUNT;$WARN;$CRIT"
+
+#######################################################
+
+if [ "$THREADCOUNT" -le "$WARN" ]
+then
+	STATUS="OK";
+	EXITSTAT=0;
+
+elif [ "$THREADCOUNT" -gt "$WARN" ]
+then
+	if [ "$THREADCOUNT" -ge "$CRIT" ]
+	then
+		STATUS="CRITICAL";
+		EXITSTAT=2;
+	else
+		STATUS="WARNING";
+		EXITSTAT=1;
+	fi
+else
+	STATUS="UNKNOWN";
+	EXITSTAT=3;
+fi
+
+echo "$STATUS - $OUTPUT " 
+
+exit $EXITSTAT
+
+#End Main Logic.
+#######################################################

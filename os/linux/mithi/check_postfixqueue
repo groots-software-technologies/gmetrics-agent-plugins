@@ -1,0 +1,127 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check server health and process using gmetrics plugins.
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# Usage details
+#######################################################
+
+if [ "${1}" = "--help" -o "${#}" = "0" ];
+       then
+       echo -e "Usage: $SCRIPTNAME -w [VALUE] -c [VALUE]
+
+        OPTION          DESCRIPTION
+        ----------------------------------
+        --help              Help
+        -w [VALUE]      Warning Threshold
+        -c [VALUE]      Critical Threshold
+        ----------------------------------
+
+        Use: ./$SCRIPTNAME -w 50 -c 70
+
+Note : [VALUE] must be an integer.";
+       exit 3;
+fi
+
+# Get user-given variables
+#######################################################
+while getopts "w:c:" Input;
+do
+       case ${Input} in
+       w)      WARN=${OPTARG};;
+       c)      CRIT=${OPTARG};;
+       *)      echo "Usage: $SCRIPTNAME -w [VALUE] -c [VALUE] or Use Help --help "
+               exit 3
+               ;;
+       esac
+done
+
+#######################################################
+if [ $WARN -gt $CRIT ]
+then
+        echo "Warning value must be less than Critical Value or Use Help --help"
+        exit 3
+else
+        WARN=$WARN
+fi
+
+#######################################################
+# Main Logic
+#######################################################
+
+postfixqueueName=`grep -H inet /etc/connectxfpostfix/postfix-*/master.cf  | egrep -v '#' | awk '{print $1}' | cut -d ':' -f1 | sed 's/master.cf//g'`
+
+#######################################################
+postfix_maxqueuesize=0
+	
+	echo "${postfixqueueName[@]}" | { while read name; do
+		postfixQname=`echo "$name" | awk -F '/' '{print $4}'`
+		postfixQSize=`postqueue -p -c "$name" | egrep -w 'Request.' | awk '{print $5}' | sed 's/\n//g'`
+		postfixQemptySize=`postqueue -p -c "$name" | egrep "empty" | awk '{print $4}' | sed 's/\n//g'`
+
+		if [ "$postfixQemptySize" == "empty" ]
+        	then
+			postfixQSize=0
+		fi
+
+		IFS=$'\n'
+		
+		if [ "$postfixQSize" -gt "$postfix_maxqueuesize" ] || [ "$postfixQSize" == $postfix_maxqueuesize ] ; then
+			postfix_maxqueuesize=$postfixQSize
+			VAR2=$postfixQname
+			VAR1=$postfixQSize
+		fi
+
+    done 	
+
+#######################################################
+OUTPUT="Mails in "$VAR2" is "$VAR1""
+#######################################################
+
+    if [ $VAR1 -lt $WARN ]
+        then
+                STATUS="OK";
+                EXITSTAT=0;
+
+                elif [ $VAR1 -ge $WARN ]
+                then
+                        if [ $VAR1 -gt $CRIT ]
+                        then
+                                STATUS="CRITICAL";
+                                EXITSTAT=2;
+                        else
+                                STATUS="WARNING";
+                                EXITSTAT=1;
+                        fi
+
+
+        else
+                STATUS="UNKNOWN";
+                EXITSTAT=3;
+        fi
+
+echo "$STATUS - $OUTPUT | postfixqueue="${VAR1}""c";$WARN;$CRIT"
+exit $EXITSTAT
+}
+# End Main Logic.
+#######################################################

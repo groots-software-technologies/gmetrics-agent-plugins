@@ -1,0 +1,109 @@
+#!/bin/bash
+#######################################################
+# Program: To check JVM java heap memory used by the process
+#
+# Purpose:
+#  This script extracts java metrics through jstat utility
+#  can be run in interactive.
+#
+#
+# Using jstat to extract values maximum 'heap' and 'perm' sizes.
+# What is called 'heap' here is the edden + old generation space,
+#######################################################
+
+# Set script name
+#######################################################
+SCRIPTNAME=$(basename $0)
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+if [ "${1}" = "--help" -o "${#}" != "4" ];
+then
+echo -e "
+OPTION                   DESCRIPTION
+-----------------------------------------
+--help                   Help
+-w [warning]             Warning threshold
+-c [critical]            Critical threshold
+-----------------------------------------
+Usage: ./$SCRIPTNAME  -w [warning threshold] -c [critical threshold]";
+
+exit 3;
+fi
+
+
+#######################################################
+# Get user-given variables
+#######################################################
+
+while getopts "w:c:" Input;
+do
+case ${Input} in
+w) WARN=${OPTARG};;
+c) CRIT=${OPTARG};;
+*) echo "Usage: $SCRIPTNAME -w [warning threshold] -c [critical threshold]"
+exit 3;
+;;
+esac
+done
+
+# Main logic
+#######################################################
+
+# Verifying thresholds
+#######################################################
+
+if [ $WARN -gt $CRIT ]
+then
+        echo "Warning value must be less than Critical Value or Use Help --help"
+        exit 3;
+fi
+
+# Jvm heap size log path
+#######################################################
+
+HEAPLOGFILE=/var/log/groots/metrics/collect_jvm_heapsize.log
+
+JVMPID=`cat $HEAPLOGFILE | grep JVMPID |  awk -F "=" '{print $2}'`
+TOTALHEAP=`cat $HEAPLOGFILE | grep TOTALHEAP |  awk -F "=" '{print $2}'`
+USEDHEAP_MB=`cat $HEAPLOGFILE | grep USEDHEAP_MB |  awk -F "=" '{print $2}'`
+USEDHEAP_PER=`cat $HEAPLOGFILE | grep USEDHEAP_PER |  awk -F "=" '{print $2}'`
+
+#######################################################
+OUTPUT="JVM PID=$JVMPID, Total Heap=$TOTALHEAP"MB", Used Heap=$USEDHEAP_MB"MB", $USEDHEAP_PER"%"  | Heapused=${USEDHEAP_PER}"%";$WARN;$CRIT;"
+#######################################################
+
+if [ "$USEDHEAP_PER" -le "$WARN" ]
+then
+        STATUS="OK";
+        EXITSTAT=0;
+
+elif [ "$USEDHEAP_PER" -gt "$WARN" ]
+        then
+                if [ "$USEDHEAP_PER" -gt "$CRIT" ]
+                then
+                        STATUS="CRITICAL";
+
+                        EXITSTAT=2;
+                else
+                        STATUS="WARNING";
+                        EXITSTAT=1;
+                fi
+else
+        STATUS="UNKNOWN";
+        EXITSTAT=3;
+fi
+
+if [ "$STATUS" = "UNKNOWN" ]
+then
+        echo "$STATUS- No data Found."
+fi
+
+echo "$STATUS - $OUTPUT"
+exit $EXITSTAT
+
+# End main logic.
+#######################################################
+

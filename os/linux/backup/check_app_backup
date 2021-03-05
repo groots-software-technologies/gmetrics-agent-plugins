@@ -1,0 +1,106 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check server health and process using gmetrics plugins.
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# Usage details
+#######################################################
+
+if [ "${1}" = "--help" -o "${#}" != "4" ];
+       then
+       echo -e "USAGE : $SCRIPTNAME -p [Log File Path] -m [Message:Success|Completed|Done|Finished]
+
+        OPTION          DESCRIPTION
+        ----------------------------------
+        --help                  Help
+        -p [Log File Path]      Full path of log file
+        -m [Success messages]   Message:Success|Completed|Done|Finished
+        ----------------------------------
+
+        Usage: ./$SCRIPTNAME -p /var/log/backup.sh.log -m "SUCCESS"
+
+";
+       exit 3;
+fi
+
+#######################################################
+# Get user-given variables
+#######################################################
+
+while getopts "p:m:" Input
+do
+        case ${Input} in
+        p) FILEPATH="$OPTARG" ;;
+        m) MSG="$OPTARG" ;;
+        *) echo "USAGE : $SCRIPTNAME -p [Log File Path] -m [Message:Success|Completed|Done|Finished]"
+           exit 3
+           ;;
+        esac
+done
+
+#######################################################
+# Main Logic
+#######################################################
+
+if [[ ! -f "$FILEPATH" && -z "$MSG" ]]
+then
+        echo "FILE PATH is incorrect or Backup message should not empty.!!!"
+        exit 3;
+fi
+
+#######################################################
+BACKUPOUTPUT=`cat $FILEPATH | grep -o "$MSG" | tail -n1 | sed 's/!\|\[\|\]//g'`
+
+#######################################################
+OUTPUT="$BACKUPOUTPUT"
+#######################################################
+
+if [ "$OUTPUT" == "$MSG" ]
+then
+    STATUS="OK";
+    EXIT=0;
+    STATUSOUTPUT="Backup Success."
+    RETVAL=1;
+
+elif [ "$OUTPUT" != "$MSG"  ]
+then
+    STATUS="CRITICAL";
+    EXIT=2;
+    STATUSOUTPUT="Backup Failure."
+    RETVAL=2;
+
+else
+    STATUS="UNKNOWN";
+    EXIT=3;
+    RETVAL=3;
+fi
+
+if [ "$STATUS" = "UNKNOWN" ]
+        then
+                echo "$STATUS- No data Found."
+else
+        echo "$STATUS - $STATUSOUTPUT | BackupStatus=${RETVAL};2;3"
+fi
+exit $EXIT
+# End Main Logic.
+#######################################################

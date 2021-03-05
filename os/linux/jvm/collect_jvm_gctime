@@ -1,0 +1,126 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose: To calculate % of time used by JVM for garbage collection
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+# `
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+if [ "${1}" = "--help" -o "${#}" != "2" ];
+then
+echo -e "
+OPTION                   DESCRIPTION
+-----------------------------------------
+--help                   Help
+-p [java path]           java path
+-----------------------------------------
+Usage: ./$SCRIPTNAME  -p [java path]
+NOTE: Mention java home path ";
+
+exit 3;
+fi
+
+
+########################################################
+# Get user-given variables
+########################################################
+
+while getopts "p:" Input;
+do
+case ${Input} in
+p) JAVAPATH=${OPTARG};;
+*) echo "Usage: $SCRIPTNAME -p [java path]"
+exit 3;
+;;
+esac
+done
+
+# Jvm garbage collection log file
+#######################################################
+
+LOGDIR=/var/log/groots/metrics/
+LOGFILE=$LOGDIR/"$SCRIPTNAME".log
+
+if [ ! -d $LOGDIR ]
+then
+    mkdir -p $LOGDIR
+elif [ ! -f $LOGFILE ]
+then
+    touch $LOGFILE
+fi
+
+#######################################################
+# Main Logic
+#######################################################
+
+# Verifying java path
+#######################################################
+
+if [ ! -d "$JAVAPATH" ]; then
+  echo "Java path directory does not exist. "
+  exit 3;
+fi
+
+# Collecting Java pids
+#######################################################
+
+JAVAPIDS=`$JAVAPATH/bin/jps | grep -v Jps | awk '{print $1}' 2>/dev/null`
+JAVAPIDS=( $JAVAPIDS )
+
+# Verifying availability of java process
+#######################################################
+
+if [ -z "$JAVAPIDS" ]; then
+echo "UNKNOWN: No (or multiple) java apps found"
+exit 3;
+fi
+
+# Declare array
+#######################################################
+
+GCTTIMEARR=( )
+
+for APPPID in "${JAVAPIDS[@]}"; do
+USERNAME=`ps -o user= -p $APPPID`
+
+# Garbage collection time spent out ot total jvm time (%)
+#######################################################
+
+JVM_CMD_GC="sudo -u $USERNAME $JAVAPATH/bin/jstat -gc -t $APPPID 1s 1"
+
+TIMESTAMP=$($JVM_CMD_GC | tail -n 1 | awk '{print $1}') # in secs
+GCT_SEC=`$JVM_CMD_GC |  tail -n 1 | awk '{print $18}'` # in secs
+GCTIME_PERCENT=`$JVM_CMD_GC | tail -n 1 | awk '{split($0,a," "); div=a[18] / a[1]; print div * 100 }' | cut -d. -f1`
+
+GCTTIMEARR=( "${GCTTIMEARR[@]}" "$GCTIME_PERCENT;$APPPID;$TIMESTAMP;$GCT_SEC" )
+done
+
+GCTTIMEARR=( $(printf "%s\n" ${GCTTIMEARR[@]} | sort -nr ) )
+
+USEDGCT_PER=`echo "${GCTTIMEARR[0]}" | awk -F ";" '{print $1}'`
+GCPID=`echo "${GCTTIMEARR[0]}" | awk -F ";" '{print $2}'`
+JVMTIMESTAMP=`echo "${GCTTIMEARR[0]}" | awk -F ";" '{print $3}'`
+GCTIME_SEC=`echo "${GCTTIMEARR[0]}" | awk -F ";" '{print $4}'`
+
+#######################################################
+printf "JVMPID=$GCPID\nGCTIME_TOTAL_SEC=$GCTIME_SEC\nJVM_TOTAL_SEC=$JVMTIMESTAMP\nGCTIME_PER=$USEDGCT_PER\n" > $LOGFILE
+#######################################################
+
+# End main logic
+#######################################################
+

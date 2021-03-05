@@ -1,0 +1,161 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check server health and process using gmetrics plugins.
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# Usage details
+#######################################################
+
+if [ "${1}" = "--help" -o "${#}" != "6" ];
+       then
+       echo -e "Usage: $SCRIPTNAME -p [qmail OR dovecot] -w [VALUE] -c [VALUE]
+
+        OPTION          DESCRIPTION
+        ----------------------------------
+        -h              Help
+        -p [POPSERVICE]  qmail OR dovecot
+        -w [VALUE]      Warning Threshold Value
+        -c [VALUE]      Critical Threshold Value
+        ----------------------------------
+
+        Usage: ./$SCRIPTNAME -p qmail -w 80 -c 90
+
+Note : [VALUE] must be an integer.";
+       exit 3;
+fi
+
+#######################################################
+# Get user-given variables
+#######################################################
+while getopts "p:w:c:" OPT
+do
+        case $OPT in
+        p) popservice="$OPTARG" ;;
+        w) WARN="$OPTARG" ;;
+        c) CRIT="$OPTARG" ;;
+        *) echo "Usage: $SCRIPTNAME -p [qmail OR dovecot] -w 80 -c 90" ;;
+        esac
+done
+
+#######################################################
+if [ $WARN -gt $CRIT ]
+then
+        echo "Warning value must be less than Critical Value or Use Help --help"
+        exit 3
+else
+        WARN=$WARN
+fi
+#######################################################
+# Main Logic
+#######################################################
+
+if [ "$popservice" != "qmail" ];
+then
+        var=$popservice
+
+elif [ "$popservice" != "dovecot" ]; then
+        var=$popservice
+
+        if [ "$popservice" != "dovecot" -a "$popservice" != "qmail"  ]; then
+                echo "Usage: $SCRIPTNAME -p [qmail OR dovecot] -w 80 -c 90"
+                exit 3;
+fi
+fi
+
+# SMTP Concurrency.
+#######################################################
+
+SMTPCONC=`tail /var/log/messages | egrep smtp | egrep 'tcpserver: status:' | awk '{print $NF}' | cut -d '/' -f1 | tail -n1| sed 's/\s//g'`
+SMTP_THRESHOLD=`tail /var/log/messages | egrep smtp | egrep 'tcpserver: status:' | awk '{print $NF}' | cut -d '/' -f2 | tail -n1| sed 's/\s//g'`
+
+if [ -z $SMTPCONC ]
+then
+        SMTPCONC=0
+else
+        SMTPCONC=$SMTPCONC
+fi
+
+if [ $SMTPCONC -ne 0 ]
+then
+        SMTPCONC=$((100*$SMTPCONC/$SMTP_THRESHOLD))
+else
+        SMTPCONC=$SMTPCONC
+fi
+
+# POP3 Concurrency.
+#######################################################
+
+if [ "$var" == "qmail" ] ; then
+        concurrency_pop=`tail /var/log/maillog | egrep 'pop' | egrep 'tcpserver: status:' | awk '{print $NF}' | cut -d '/' -f1 | tail -n 1`
+        pop_threshold=`tail /var/log/maillog | egrep 'pop' | egrep 'tcpserver: status:' | awk '{print $NF}' | cut -d '/' -f2 | tail -n 1`
+fi
+
+if [ "$var" == "dovecot" ] ; then
+        concurrency_pop=`$(tail /var/log/maillog | grep 'dovecot: master: pop3 concurrency' | awk -F ',' '{print $1}' | awk -F '=' '{print $2}' | tail -n1)`
+        pop_threshold=`$(tail /var/log/maillog | grep 'dovecot: master: pop3 concurrency' | awk -F ',' '{print $2}' | awk -F '=' '{print $2}' | tail -n1)`
+
+fi
+
+if [ -z $concurrency_pop ]
+then
+        concurrency="0"
+else
+        concurrency="$concurrency_pop"
+fi
+
+if [ $concurrency -ne 0 ]
+then
+        POPCONC=$((100*$concurrency/$pop_threshold))
+else
+        POPCONC=$concurrency
+fi
+
+#######################################################
+OUTPUT=`echo SMTP concurrency= $SMTPCONC"%" and POP concurrency= $POPCONC"%"`
+#######################################################
+
+if   [ $SMTPCONC -le $WARN -a $POPCONC -le $WARN ]
+then
+        STATUS="OK";
+        EXITSTAT=0;
+elif  [ $SMTPCONC -ge $WARN -o $POPCONC -ge $WARN ]
+then
+        if [ $SMTPCONC -gt $CRIT -o $POPCONC -gt $CRIT ]
+        then
+                STATUS="CRITICAL";
+                EXITSTAT=2;
+        else
+                STATUS="WARNING";
+                EXITSTAT=1;
+        fi
+else
+        STATUS="UNKNOWN";
+        EXITSTAT=3;
+fi
+
+echo "$STATUS- $OUTPUT | 'SMTP'=${SMTPCONC}"%";$WARN;$CRIT 'POP'=${POPCONC}"%";$WARN;$CRIT"
+
+exit $EXITSTAT
+# End Main Logic.
+#######################################################
+

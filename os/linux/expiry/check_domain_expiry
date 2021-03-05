@@ -1,0 +1,208 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check server health and process using gmetrics plugins.
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# Requirements:
+#   Requires whois
+#
+#######################################################
+PATH=/bin:/usr/bin:/usr/local/bin:/usr/local/ssl/bin:/usr/sfw/bin
+export PATH
+
+# type command is checking whether whois command present or not.
+#######################################################
+type whois >/dev/null 2>&1 || { echo >&2 "This plugin require "whois" package, but it's not installed. Aborting."; exit 1; }
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Usage details.
+#######################################################
+if [ "${1}" = "--help" -o "${#}" != "6" ];
+       then
+       echo -e "Usage: $SCRIPTNAME -d [DOMAIN NAME] -w [DAY'S] -c [DAY'S]
+
+        OPTION           DESCRIPTION
+        ----------------------------------
+        --help              Help
+        -w [DAY'S]          Warning in days.
+        -c [DAY'S]          Critical in days.
+        -d [DOMAIN NAME]    Domain Name (example.com, test.in, mydomain.net .etc)
+        ----------------------------------
+
+        Usage: ./$SCRIPTNAME -d example.com -w 30 -c 15
+
+Note : [DAY'S] must be an integer.";
+       exit 3;
+fi
+
+# Get user-given variables
+#######################################################
+while getopts "d:w:c:" Input;
+do
+       case ${Input} in
+       d)      DOMAIN=${OPTARG};;
+       w)      WARN=${OPTARG};;
+       c)      CRIT=${OPTARG};;
+       *)      echo "Usage: $SCRIPTNAME -d example.com -w 30 -c 15 or Use Help --help "
+               exit 3
+               ;;
+       esac
+done
+
+# Warning and Critical threshold comparison.
+#######################################################
+if [ $CRIT -gt $WARN ]
+then
+        echo "Critical day must be less than warning day or Use Help --help"
+        exit 3
+else
+        CRIT=$CRIT
+fi
+
+# Whois server to use (cmdline: -s)
+#######################################################
+IANA_SERVER="whois.iana.org"
+WHOIS_SERVER="whois.internic.org"
+
+# Location of system binaries
+#######################################################
+WHOIS=`which whois`
+
+# Place to stash temporary files
+#######################################################
+WHOIS_TMP="/tmp/whois.$$"
+
+# Purpose: Access whois data to grab the registrar and expiration date
+#######################################################
+    # Avoid WHOIS LIMIT EXCEEDED - slowdown our whois client by adding 3 sec
+    sleep 1
+    # Save the domain since set will trip up the ordering
+    DOMAINEXT="`echo ${DOMAIN} | cut -d '.' -f3 | tr '[A-Z]' '[a-z]'`"
+    if [ "${DOMAINEXT}"  == "" ];
+    then
+            DOMAINEXT="`echo ${DOMAIN} | cut -d '.' -f2 | tr '[A-Z]' '[a-z]'`"
+    fi
+
+    # Invoke whois to find the domain registrar and expiration date
+    # Let whois select server
+
+    WHS="$(${WHOIS} -h ${IANA_SERVER} "${DOMAINEXT}" | grep 'whois:' | awk '{print $2}')"
+
+    if [ "${DOMAINEXT}" != "" ];
+    then
+        ${WHOIS} -h ${WHS} "${DOMAIN}" > ${WHOIS_TMP}
+    else
+        echo "Provided Domain $DOMAIN Details not found"
+        exit 1;
+    fi
+
+    # Parse out the expiration date and registrar -- uses the last registrar it finds
+    if [ "$DOMAINEXT" == "uk" ]
+    then
+        REGISTRAR=`cat ${WHOIS_TMP} | awk -F: '/Registrar:/ && $0 != ""  { getline; REGISTRAR=substr($0,9,17) } END { print REGISTRAR }'`
+    else
+        REGISTRAR=`cat ${WHOIS_TMP} | awk -F: '/Registrar:/ && $2 != ""  { REGISTRAR=substr($2,2,17) } END { print REGISTRAR }'`
+    fi
+
+# Purpose: Convert a string month into an integer representation
+#######################################################
+#Expiry Date:|Expiration date:|Renewal date:|Expiry date:|Expires on:|Expiry date:|Registry Expiry Date:|paid-till:|Registry Expiry Date:|Domain expires:|expire:|renewal date:|Registry Expiry Date:|expires:|Expires:|expires|Expiry Date:|Expiration Date:|Expire Date:|Expires On:|Expires|Expiration|
+
+#DOMAINDATE=`cat ${WHOIS_TMP} | egrep -i "Expiry Date:|Expires on:|paid-till:|Domain expires:|renewal date:|Expiration Date:Expires On:" | sed 's/ //g' | awk -F: '{ print $2 }'`
+DOMAINDATE=`cat ${WHOIS_TMP} | egrep -i "Registrar Registration Expiration Date:|Expiry Date:|Expires on:|paid-till:|Domain expires:|renewal date:|Expiration Date:Expires On:" | sed 's/ //g' | awk -F: '{ print $2 }'| awk -F"T" '{print$1}'`
+
+# Convert domain expiry date (11-Jun-2020 and 2021-05-18T08) in to proper format 2019-02-15
+#######################################################
+DOMAINEXPDATE=`date --date="$DOMAINDATE" "+%Y-%m-%d"`
+DATEEXP=`date --date="$DOMAINEXPDATE" "+%d-%b-%Y"`
+
+# Convert the date to seconds, and get the diff between NOW and the expiration date
+#######################################################
+# Convert curent date in to sseconds.
+CURDATE=`date +%Y-%m-%d`
+#CURDATEINSEC=`date --date "$d3" +%s`
+CURDATEINSEC=`date --date "$CURDATE" +%s`
+
+# Domain expiry date convert in to seconds.
+DOMAINEXPDATEINSEC=`date --date "$DOMAINEXPDATE" +%s`
+
+# Compare both date.
+#######################################################
+DATEDIFF=$((DOMAINEXPDATEINSEC-CURDATEINSEC))
+
+# Convert 86400 seconds in to day (86400 = 1 day).
+#######################################################
+DAYS=`echo $((DATEDIFF/86400))`
+
+# Domain registration expired condition.
+#######################################################
+EXPDAYS=`echo $DAYS`
+if [ "$EXPDAYS" -lt "0" ]
+then
+        echo "CRITICAL - Domain Registration Is Expired on \"$DOMAINEXPDATE\" For $DOMAIN"
+        exit 2;
+else
+        DAYS=$EXPDAYS
+fi
+
+#######################################################
+OUTPUT="Domain $DOMAIN will expire within $DAYS days & expire on: $DATEEXP"
+#######################################################
+# Main Domain Expiry Logic.
+#######################################################
+
+if [ "$DAYS" -gt "$WARN" ]
+then
+        STATUS="OK";
+        EXITSTAT=0;
+
+elif [ "$DAYS" -le "$WARN" ]
+        then
+                if [ "$DAYS" -le "$CRIT" ]
+                then
+                        STATUS="CRITICAL";
+                        EXITSTAT=2;
+                else
+                        STATUS="WARNING";
+                        EXITSTAT=1;
+                fi
+else
+        STATUS="UNKNOWN";
+        EXITSTAT=3;
+fi
+
+# Remove $WHOIS_TMP temp file.
+#######################################################
+rm -rf $WHOIS_TMP
+
+echo "$STATUS - $OUTPUT | DAYS=$DAYS;$WARN;$CRIT"
+exit $EXITSTAT
+# End Main Logic.
+#######################################################
+

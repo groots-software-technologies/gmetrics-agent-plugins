@@ -1,0 +1,176 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check server health and process using gmetrics plugins.
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# type command is checking whether sysstat, sar command present or not.
+#######################################################
+type bc >/dev/null 2>&1 || { echo >&2 "This plugin require "bc" package, but it's not installed. Aborting."; exit 1; }
+
+# Usage details
+#######################################################
+if [ "${1}" = "--help" -o "${#}" != "8" ];
+       then
+       echo -e "Usage: $SCRIPTNAME -w [VALUE] -c [VALUE] -s [GUAGE] -f [INPUTLOGFILE]
+
+        OPTION          DESCRIPTION
+        ----------------------------------
+        --help              Help
+        -w [VALUE]          Warning Value.
+        -c [VALUE]          Critical Value.
+        -s [GUAGE]          Size in KB, MB and GB.
+	-f [INPUTLOGFILE]   Input apache,httpd or nginx access log file.
+        ----------------------------------
+
+        Usage: ./$SCRIPTNAME -w 10 -c 15 -s {KB,MB,GB} -f /var/log/httpd/access_log
+
+Note : [VALUE] must be an integer.";
+       exit 3;
+fi
+
+#######################################################
+# Get user-given variables
+#######################################################
+
+while getopts "w:c:s:f:" Input;
+do
+       case ${Input} in
+       w)      IWARN=${OPTARG};;
+       c)      ICRIT=${OPTARG};;
+       s)      IGAUGE=${OPTARG};;
+       f)      INPUTFILE=${OPTARG};;
+       *)      echo "Usage: $SCRIPTNAME -w 20 -c 30 -s {KB,MB,GB} -f /var/log/httpd/access_log"
+               exit 3
+               ;;
+       esac
+done
+
+#######################################################
+if [ $IWARN -gt $ICRIT ]
+then
+        echo "Warning value must be less than Critical Value or Use Help --help"
+        exit 3
+else
+        IWARN=$IWARN
+fi
+
+#######################################################
+# Main Logic
+#######################################################
+
+if [ ! -f $INPUTFILE ]
+then
+   echo "Input file "$INPUTFILE" not found. Please check web service is running or not."
+   exit 3
+fi
+
+#######################################################
+IP=`cat "$INPUTFILE" | grep -v 127.0.0.1 | egrep "$IP" | awk '{print $1}' | sort | uniq -c | sort -nr | head -n1 | awk '{print $2}'`
+
+HITS=`cat "$INPUTFILE" | egrep "$IP" | awk '{print $1}' | sort | uniq -c | sort -nr | head -n1 | awk '{print $1}'`
+
+TOTALSIZE=`cat "$INPUTFILE" | egrep "$IP" | awk '{print $10}' | perl -ne '$sum += $_ } { print $sum'`
+
+MAXWEBPAGE=`cat "$INPUTFILE" | egrep "$IP" | awk -F" " '{print $7}' | sort | uniq -c | sort -nr | head -n1 | awk '{print $2}'`
+
+#######################################################
+#Actual Size Comparing and set as per Gauge(KB,MB,GB)
+#######################################################
+#ACTSIZE=`echo $TOTALSIZE/1024/1024/1024 | bc`
+
+SIZE="$TOTALSIZE"
+SIZE_KB=`echo "scale=2;($SIZE+512)/1024" | bc`
+SIZE_MB=`echo "scale=2;($SIZE+512)/1024/1024" | bc`
+SIZE_GB=`echo "scale=2;($SIZE+512)/1024/1024/1024" | bc`
+
+#######################################################
+if [ "$SIZE_KB" \< "1024" ]
+then
+        ACTSIZE="$SIZE_KB"
+        GAUGE="KiB"
+elif [ "$SIZE_MB" \< "1024" ]
+then
+        ACTSIZE="$SIZE_MB"
+        GAUGE="MiB"
+else
+        if [ "$SIZE_GB" \< "1024" ]
+        then
+                ACTSIZE="$SIZE_GB"
+                GAUGE="GiB"
+        fi
+fi
+
+#######################################################
+# Convert Input Values {WARN and CRIT} to Bytes due to comparison.
+#######################################################
+
+#WARN=`echo "($IWARN*1024*1024*1024)+512" | bc`
+#CRIT=`echo "($ICRIT*1024*1024*1024)+512" | bc`
+
+if [ "$IGAUGE" == "KB" ]
+then
+        WARN=`echo "($IWARN*1024)+512" | bc`
+        CRIT=`echo "($ICRIT*1024)+512" | bc`
+
+elif [ "$IGAUGE" == "MB" ]
+then
+        WARN=`echo "($IWARN*1024*1024)+512" | bc`
+        CRIT=`echo "($ICRIT*1024*1024)+512" | bc`
+
+else
+        if [ "$IGAUGE" == "GB" ]
+        then
+                WARN=`echo "($IWARN*1024*1024*1024)+512" | bc`
+                CRIT=`echo "($ICRIT*1024*1024*1024)+512" | bc`
+
+        fi
+fi
+
+#######################################################
+OUTPUT=`echo "Top IP $IP, Top Hit $HITS, Total Bandwidth $ACTSIZE $GAUGE".`
+#######################################################
+
+if [ "$SIZE" -le "$WARN" ]
+then
+        STATUS="OK";
+        EXITSTAT=0;
+
+elif [ "$SIZE" -ge "$WARN" ]
+        then
+                if [ "$SIZE" -gt "$CRIT" ]
+                then
+                        STATUS="CRITICAL";
+                        EXITSTAT=2;
+                else
+                        STATUS="WARNING";
+                        EXITSTAT=1;
+                fi
+else
+        STATUS="UNKNOWN";
+        EXITSTAT=3;
+fi
+
+echo "$STATUS - $OUTPUT | Bandwidth=$SIZE"Bytes";$WARN;$CRIT"
+exit $EXITSTAT
+# End Main Logic.
+#######################################################

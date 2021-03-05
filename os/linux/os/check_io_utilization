@@ -1,0 +1,108 @@
+#!/bin/bash
+#######################################################
+# Program: To check disk io utilization 
+#
+# Purpose:
+#  This script checks disk io utilization for a device using iostat 
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+# Author: Groots DevOps Team
+# Email : support@groots.in
+#######################################################
+
+# Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+
+# Usage details.
+#########################################################
+
+if [ "${1}" = "--help" -o "${#}" != "6" ];
+then
+echo "
+	Usage: ./$SCRIPTNAME -d [device name] -w [warining] -c [critical]
+
+	OPTION                   DESCRIPTION
+	-----------------------------------------
+	--help                   Help
+	-e [device name]         Device
+	-w [warning]             Warning threshhold
+	-c [critical]            Critical threshhold
+	-----------------------------------------
+
+	Ex: ./$SCRIPTNAME -d [device name] -w 50 -c 60
+	";
+	exit 3;
+fi
+
+#########################################################
+# Get user-given variables
+#########################################################
+
+while getopts "d:w:c:" Input;
+  do
+        case ${Input} in
+        d) DEVICE=${OPTARG};;
+        w) WARN=${OPTARG};;
+        c) CRIT=${OPTARG};;
+        *) echo "Usage: $SCRIPTNAME -d [device name] -w [warining] -c [critical]"
+        exit 3;
+        ;;
+        esac
+done
+
+# Main logic
+#######################################################
+
+# Command to extract data using iostat 
+#########################################################
+
+KBREAD=`iostat -k | grep -w "$DEVICE" | awk '{print $3}'`
+IKBREAD=`echo $KBREAD | cut -d. -f1`
+
+
+KBWRITE=`iostat -k | grep -w "$DEVICE" | awk '{print $4}'`
+IKBWRITE=`echo $KBWRITE | cut -d. -f1`
+
+TPS=`iostat -k | grep -w "$DEVICE" | awk '{print $2}'`
+
+#########################################################
+OUTPUT="tps = $TPS, kb_read=$KBREAD kb/s, kb_write=$KBWRITE kb/s |kb_read=${IKBREAD}"Kbps";$WARN;$CRIT;0; kb_write=${IKBWRITE}"Kbps";$WARN;$CRIT;0;"
+#########################################################
+
+if [ "$IKBREAD" -lt "$WARN" -a $IKBWRITE -lt $WARN ]
+then
+        STATUS="OK";
+        EXITSTAT=0;
+
+elif [ "$IKBREAD" -gt "$WARN" -o $IKBWRITE -gt $WARN ]
+        then
+                if [ "$IKBREAD" -gt "$CRIT"  -o $IKBWRITE -gt $CRIT ]
+                then
+                        STATUS="CRITICAL";
+                        EXITSTAT=2;
+                else
+                        STATUS="WARNING";
+                        EXITSTAT=1;
+                fi
+else
+        STATUS="UNKNOWN";
+        EXITSTAT=3;
+fi
+
+if [ "$STATUS" = "UNKNOWN" ]
+then
+        echo "$STATUS - No data Found."
+else
+        echo "$STATUS - $OUTPUT"
+fi
+
+exit $EXITSTAT
+
+# End main logic
+#######################################################
+

@@ -1,0 +1,153 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check Aws Cost detailed metrics using aws cli
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# type command is checking whether aws, jq, bc, timeout command present or not.
+#######################################################
+
+# check pre-requisite for fetch AWS cloud watch metrics, below packages must install without this plugin won't run.
+# type command is checking whether jq, aws, bc and timeout or gtimeout present or not.
+
+type jq >/dev/null 2>&1 || { echo >&2 "This plugin require "jq" package, but it's not installed. Aborting."; exit 1; }
+type aws >/dev/null 2>&1 || { echo >&2 "This plugin require "awscli" package, but it's not installed. Aborting."; exit 1; }
+
+# Usage details
+#######################################################
+
+if [ "${1}" = "--help" -o "${#}" != "8" ];
+       then
+       echo -e "
+
+        OPTION          DESCRIPTION
+        ------------------------------------------------------------------------------------------------------
+        --help                                          Help
+        -p [Profile Name]                               --profile (Which AWS profile should be used to connect to aws?)
+        -m [Metrics]                                    --metrics (UnblendedCost/BlendedCost)
+        -w [Value]                                      --warning threshold.
+        -c [Value]                                      --critical threshold.
+        ------------------------------------------------------------------------------------------------------
+
+        Usage: ./$SCRIPTNAME -p [Profile] -m [UnblendedCost] -w 30 -c 50
+                ";
+       exit 3;
+fi
+
+# Get user-given variables
+#######################################################
+
+    while getopts "p:m:w:c:" INPUT
+    do
+        case $INPUT in
+        p) PROFILE="$OPTARG"
+        ;;
+        m) METRICS="$OPTARG"
+        ;;
+        w) WARN="$OPTARG"
+        ;;
+        c) CRIT="$OPTARG"
+        ;;
+        *) echo "USAGE : sh $SCRIPTNAME -p [Profile] -m [UnblendedCost] -w 30 -c 50"
+        exit 3
+        esac
+    done
+
+# Main Function
+#######################################################
+
+Y=`date +'%Y'`
+M=`date +%m`
+
+FIRSTDAY_M="$Y-$M-01"
+LASTDAY_M=`date  +'%Y-%m-%d'`
+LASTDAY_D=`date +'%Y-%m-%d' -d "1 day ago"`
+
+if [ "$FIRSTDAY_M" == "$LASTDAY_M" ]; then
+
+STATUS="OK";
+EXITSTAT=0;
+PREVDAYCOST=0;
+RESULT=0;
+
+OUTPUT="Daily ${METRICS} = ${PREVDAYCOST} USD and Monthly ${METRICS} = ${RESULT} USD  | Daily=${PREVDAYCOST}"usd";;;; Monthly=${RESULT}"usd";;;;"
+
+echo "$STATUS - $OUTPUT"
+
+exit $EXITSTAT
+
+fi
+
+
+# Cost explorer aws cli command
+#######################################################
+
+COMMAND="/usr/local/bin/aws --profile $PROFILE ce get-cost-and-usage"
+COMMAND="${COMMAND} --time-period Start=$FIRSTDAY_M,End=$LASTDAY_M "
+COMMAND="${COMMAND} --granularity=DAILY "
+COMMAND="${COMMAND} --metrics "$METRICS""
+COMMAND="${COMMAND} --output json";
+
+MASTER=$(${COMMAND} | jq '.') ;
+
+MONTHLY_RESULT=`echo ${MASTER} | jq '.' | grep -w "Amount" |  awk '{print $2}' | sed 's/,$//' | sed 's/"/,/'  |  sed 's/"//' | awk -F ',' '{sum+=$NF} END {print sum}'`
+INTMONTHLY_RESULT=`echo ${MASTER} | jq '.' | grep -w "Amount" |  awk '{print $2}' | sed 's/,$//' | sed 's/"/,/'  |  sed 's/"//' | awk -F ',' '{sum+=$NF} END {print sum}' | cut -d. -f1`
+RESULT=`printf "%.2f" $MONTHLY_RESULT`
+
+PREVDAYCOST=`echo ${MASTER} | jq '.' | grep -A 10 -w "$LASTDAY_D" | grep -w "Amount" | tail -1 | awk '{print $2}' | sed 's/,$//' | sed 's/"/,/'  |  sed 's/"//' | sed 's/,//'`
+PREVDAYCOST=`printf "%.2f" $PREVDAYCOST`
+
+#########################################################
+OUTPUT="Daily ${METRICS} = ${PREVDAYCOST} USD and Monthly ${METRICS} = ${RESULT} USD | Daily=${PREVDAYCOST}"usd";;;; Monthly=${RESULT}"usd";;;;"
+#########################################################
+
+if [ "$INTMONTHLY_RESULT" -le "$WARN" ]
+then
+        STATUS="OK";
+        EXITSTAT=0;
+
+        elif [ "$INTMONTHLY_RESULT" -gt "$WARN" ]
+        then
+                if [ "$INTMONTHLY_RESULT" -gt "$CRIT" ]
+                then
+                        STATUS="CRITICAL";
+                        EXITSTAT=2;
+                else
+                        STATUS="WARNING";
+                        EXITSTAT=1;
+                fi
+else
+        STATUS="UNKNOWN";
+        EXITSTAT=3;
+fi
+
+if [ "$STATUS" = "UNKNOWN" ]
+then
+        echo "$STATUS - No data Found."
+else
+        echo "$STATUS - $OUTPUT"
+fi
+
+exit $EXITSTAT
+
+# End main logic
+#########################################################

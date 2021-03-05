@@ -1,0 +1,115 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check server health and process using gmetrics plugins.
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# Usage details
+#######################################################
+
+# Depending on your docker configuration, root might be required. If your nrpe user has rights
+# to talk to the docker daemon, then root is not required. This is why root privileges are not
+# checked.
+#
+# The script checks if a container is running.
+#   OK - running
+#   WARNING - restarting
+#   CRITICAL - stopped
+#   UNKNOWN - does not exist
+
+if [ "${1}" = "--help" -o "${#}" != "2" ]
+       then
+       echo -e "Usage: $SCRIPTNAME -c [Container Name or Container ID]
+
+        OPTION          DESCRIPTION
+        ----------------------------------
+        --help          Help
+        -c              Container Name or Container ID
+        ----------------------------------
+
+        Usage: ./$SCRIPTNAME -c ed1c086bdd28
+        OR
+        Usage: ./$SCRIPTNAME -c mysql
+        "
+        exit 3;
+fi
+
+# Get user-given variables
+#######################################################
+
+while getopts "c:" options
+do
+    case $options in
+        c) CONTAINER=$OPTARG ;;
+        *) echo "Usage: $SCRIPTNAME -c [Container Name or Container ID] or Use Help --help"
+            exit 3 ;;
+    esac
+done
+
+#######################################################
+# Main Logic
+#######################################################
+
+if [ "x${CONTAINER}" == "x" ]; then
+  echo "UNKNOWN - Container ID or Container Name Required | $CONTAINER=3"C";1;2;0"
+  exit 3
+fi
+
+if [ "x$(which docker)" == "x" ]; then
+  echo "UNKNOWN - Missing docker binary | $CONTAINER=3"C";1;2;0"
+  exit 3
+fi
+
+#######################################################
+docker info > /dev/null 2>&1
+#######################################################
+
+if [ $? -ne 0 ]; then
+  echo "UNKNOWN - Unable talk to the docker daemon | $CONTAINER=3"C";1;2;0"
+  exit 3
+fi
+
+RUNNING=$(docker inspect --format="{{.State.Running}}" $CONTAINER 2> /dev/null)
+
+if [ $? -eq 1 ]; then
+  echo "UNKNOWN - $CONTAINER does not exist. | $CONTAINER=3"C";1;2;0"
+  exit 3
+fi
+
+if [ "$RUNNING" == "false" ]; then
+  echo "CRITICAL - $CONTAINER is not running. | $CONTAINER=2"C";1;2;0"
+  exit 2
+fi
+
+RESTARTING=$(docker inspect --format="{{.State.Restarting}}" $CONTAINER)
+
+if [ "$RESTARTING" == "true" ]; then
+  echo "WARNING - $CONTAINER state is restarting. | $CONTAINER=1"C";1;2;0"
+  exit 1
+fi
+
+STARTED=$(docker inspect --format="{{.State.StartedAt}}" $CONTAINER)
+NETWORK=$(docker inspect --format="{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}" $CONTAINER)
+
+echo "OK - $CONTAINER is running. IP: $NETWORK, StartedAt: $STARTED | $CONTAINER=0"C";1;2;0"
+# End Main Logic
+#######################################################

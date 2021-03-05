@@ -1,0 +1,101 @@
+#!/bin/bash
+#######################################################
+# Program: To check JVM java heap memory used elasticsearch
+#
+# Purpose:
+#  This script extracts jvm heap memory used by elastic api
+#  can be run in interactive.
+#
+#
+# Using jstat to extract values maximum 'heap' and 'perm' sizes.
+# What is called 'heap' here is the edden + old generation space,
+# while 'perm' represents the permanent generation space or metaspace
+########################################################
+
+# Set script name
+#######################################################
+SCRIPTNAME=$(basename $0)
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# Usage details.
+#########################################################
+
+if [ "${1}" = "--help" -o "${#}" != "8" ];
+then
+echo -e "Usage: $SCRIPTNAME -u [elastic username] -p [elastic passowrd] -w [warning threshhold] -c [critical threshhold]
+OPTION                   DESCRIPTION
+-----------------------------------------
+--help                   Help
+-w [warning]             Warning value
+-c [critical]            Critical value
+-u [username]            Elastic Username
+-p [password]            Elastiic Password
+-----------------------------------------
+Usage: ./$SCRIPTNAME  -u [elastic username] -p [elastic passowrd] -w [warning threshhold] -c [critical threshhold] ";
+exit 3;
+fi
+
+
+#########################################################
+# Get user-given variables
+#########################################################
+
+while getopts "u:p:w:c:" Input;
+do
+case ${Input} in
+u) USERNAME=${OPTARG};;
+p) PASSWORD=${OPTARG};;
+w) WARN=${OPTARG};;
+c) CRIT=${OPTARG};;
+*) echo "Usage: $SCRIPTNAME -u [elastic username] -p [elastic passowrd] -w [warning threshhold] -c [critical threshhold]"
+exit 3;
+;;
+esac
+done
+
+if [ $WARN -gt $CRIT ]
+then
+echo "CRITICAL threshold value is less than WARNING threshold."
+exit 3;
+fi
+
+ELASTIC_CMD=`curl -v --silent -X GET  -u $USERNAME:$PASSWORD http://localhost:9200/_nodes/stats/jvm?pretty 2>&1`
+HEAP_USED_BYTES=`echo -n "$ELASTIC_CMD" | grep -w "heap_used_in_bytes" | awk '{print $3}' | sed 's/,$//'`
+HEAPUSED_MB=$(($HEAP_USED_BYTES / 1024 / 1024))
+HEAP_TOTAL_BYTES=`echo -n "$ELASTIC_CMD" | grep -w "heap_committed_in_bytes" | awk '{print $3}' | sed 's/,$//'`
+HEAPTOTAL_MB=$(($HEAP_TOTAL_BYTES / 1024 / 1024))
+PID=`ps -elf | grep elasticsearch | head -n 1 | awk '{print $4}'`
+MEM_PER=`echo -n "$ELASTIC_CMD" | grep -w "heap_used_percent" | awk '{print $3}' | sed 's/,$//'`
+
+#########################################################
+OUTPUT="ELASTICSEARCH PID=$PID, TOTALHEAP=$HEAPTOTAL_MB"MB" USEDHEAP=$HEAPUSED_MB"MB" and $MEM_PER"%" percent used | USEDHEAP=$MEM_PER"%";$WARN;$CRIT;"
+#########################################################
+
+if [ "$MEM_PER" -le "$WARN" ]
+then
+        STATUS="OK";
+        EXITSTAT=0;
+
+        elif [ "$MEM_PER" -gt "$WARN" ]
+        then
+                if [ "$MEM_PER" -gt "$CRIT" ]
+                then
+                        STATUS="CRITICAL";
+
+                        EXITSTAT=2;
+                else
+                        STATUS="WARNING";
+                        EXITSTAT=1;
+                fi
+else
+        STATUS="UNKNOWN";
+        EXITSTAT=3;
+fi
+
+echo "$STATUS - $OUTPUT"
+exit $EXITSTAT
+
+#########################################################

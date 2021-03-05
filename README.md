@@ -1,8 +1,24 @@
-# gmetrics-agent-plugins
-Groots Metrics Remote Agent monitoring plugins
 
-These plugins are compatible with groots metrics, so if you want to run these plugins, so login using following url and start your server monitoring.
+# Gmetrics-plugins, copy to "/groots/metrics/libexec"
 
-https://metrics.groots.in
+- To copy gmetrics plugins from git to remote host's /groots/metrics/libexec directory
 
-Refer metrics details on www.groots.in site.
+# Execution 
+
+### Help Usage & get plugin list to copy
+
+bash <(curl -Ls https://raw.githubusercontent.com/grootsadmin/gmetrics-agent-setup/[branch]/v5/bin/addplugin.sh) -h 
+
+### To add plugins
+
+$ bash <(curl -Ls https://raw.githubusercontent.com/grootsadmin/gmetrics-agent-setup/[branch]/v5/bin/addplugin.sh) -p (pluginname)
+
+Ex:
+
+$ bash <(curl -Ls https://raw.githubusercontent.com/grootsadmin/gmetrics-agent-setup/alpha/v5/bin/addplugin.sh) -p (pluginname)
+
+- Plugins will get copied to groots/metrics/libexec directory
+
+### Refer log
+
+cat /var/log/groots/metrics/addplugin.sh.log

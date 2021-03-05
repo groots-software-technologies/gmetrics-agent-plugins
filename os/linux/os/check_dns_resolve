@@ -1,0 +1,105 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check server health and process using gmetrics plugins.
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# Usage details
+#######################################################
+
+if [ "${1}" = "--help" -o "${#}" = "0" ];
+       then
+       echo -e "Usage: $SCRIPTNAME -d [VALUE]
+
+        OPTION          DESCRIPTION
+        ----------------------------------
+        --help          Help
+        -d [VALUE]      Service Name
+        ----------------------------------
+
+        Use: ./$SCRIPTNAME -d DNS
+
+Note : [VALUE] must be an numeric.";
+       exit 3;
+fi
+
+# Get user-given variables
+#######################################################
+while getopts "d:" Input;
+do
+       case ${Input} in
+       d)      IDNS=${OPTARG};;
+       *)      echo "Usage: $SCRIPTNAME -d [VALUE] or Use Help --help"
+               exit 3
+               ;;
+       esac
+done
+
+# Gathere IP list from file.
+#######################################################
+DNSIPS=`grep '^nameserver' /etc/resolv.conf | awk -F " " '{print $2}'`
+
+#######################################################
+# Main Logic
+#######################################################
+
+index=0
+echo "${DNSIPS[@]}" | { while read IP ;do
+dig @"$IP" google.com >/dev/null
+ret=`echo "$?"`
+if [ "$ret" != "0" ]; then
+	
+	badIP[$index]="$IP"
+	let "index= $index+ 1"
+fi		
+done
+
+#######################################################
+OUTPUT=${#badIP[@]}
+#######################################################
+
+if [ "$OUTPUT" == 0 ]
+then
+    STATUS="OK";
+    EXIT=0;
+    STATUSOUTPUT="DNS is working"
+
+elif [ "$OUTPUT" != 0  ]
+then
+    STATUS="CRITICAL";
+    EXIT=2;
+    STATUSOUTPUT="DNS is not working IP: "${badIP[@]}""
+else
+    STATUS="UNKNOWN";
+    EXIT=3;
+fi
+
+if [ "$STATUS" = "UNKNOWN" ]
+        then
+                echo "$STATUS- No data Found"
+else
+        echo "$STATUS - $STATUSOUTPUT | STATUS=${EXIT};2;3"
+fi
+exit $EXIT
+}
+#End Main Logic.
+#######################################################

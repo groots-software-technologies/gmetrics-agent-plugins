@@ -1,0 +1,77 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check server health and process using gmetrics plugins.
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# Usage details
+#######################################################
+
+if [ "${1}" = "--help" -o "${1}" = "-h" ]
+       then
+       echo -e "Usage: $SCRIPTNAME
+
+        OPTION          DESCRIPTION
+        ----------------------------------
+        --help              Help
+        -h	            Help
+        ----------------------------------
+
+        Usage: ./$SCRIPTNAME
+
+	";
+       exit 3;
+fi
+
+#######################################################
+# Main Logic
+#######################################################
+
+MCSDATA="0"
+MAILSTOREDATA="1"
+STATUS="UpToDateUpToDate"
+DATA="PrimarySecondary"
+
+#######################################################
+IN_DATA_MCS=`cat /proc/drbd | egrep "Primary/Secondary|UpToDate/UpToDate" | head -n1 | awk -F ":" '{print $4}' | awk -F " " '{print $1}' | sed 's/\///g'`
+IN_DATA_MAILSTORE=`cat /proc/drbd | egrep "Primary/Secondary|UpToDate/UpToDate" | tail -n1 | awk -F ":" '{print $4}' | awk -F " " '{print $1}' | sed 's/\///g'`
+
+IN_MCSSTATUS=`cat /proc/drbd | egrep "Primary/Secondary|UpToDate/UpToDate" | head -n1 | awk -F ":" '{print $5}' | awk -F " " '{print $1}' | sed 's/\///g'`
+IN_MAILSTORESTATUS=`cat /proc/drbd | egrep "Primary/Secondary|UpToDate/UpToDate" | tail -n1 | awk -F ":" '{print $5}' | awk -F " " '{print $1}' | sed 's/\///g'`
+
+#######################################################
+
+if [ "$IN_MCSSTATUS" == "$STATUS" ] && [ "$IN_MAILSTORESTATUS" == "$STATUS" ] && [ "$IN_DATA_MCS" == $DATA ] && [ "$IN_DATA_MAILSTORE" == $DATA ]
+then
+        STATUS="OK";
+        EXITSTAT=0;
+	OUTPUT="DRBD syncronization is working."
+else
+        STATUS="CRITICAL";
+        EXITSTAT=2;
+	OUTPUT="DRBD syncronization is not working."
+fi
+
+echo "$STATUS - $OUTPUT | DRBD=$EXITSTAT;2;2"
+exit $EXITSTAT
+# End Main Logic.
+#######################################################

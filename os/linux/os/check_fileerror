@@ -1,0 +1,117 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check server health and process using gmetrics plugins.
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# Usage Details
+#######################################################
+
+if [ "${1}" = "--help" -o "${#}" = "0" ]; 
+       then 
+       echo -e "Usage: $SCRIPTNAME -w [VALUE] -c [VALUE] -p [FILE PATH]
+
+        OPTION          DESCRIPTION
+        ----------------------------------
+        --help              Help
+        -w [VALUE]      Warning Threshold
+        -c [VALUE]      Critical Threshold
+	-p [FILE PATH]	Full File Path
+        ----------------------------------
+ 	
+	Use: ./$SCRIPTNAME -w 50 -c 70 -p /var/log/messages
+
+Note : [VALUE] must be an integer."; 
+       exit 3; 
+fi 
+
+# Get user-given variables 
+#######################################################
+while getopts "w:c:p:" Input; 
+do 
+       case ${Input} in 
+       w)      WARN=${OPTARG};; 
+       c)      CRIT=${OPTARG};; 
+       p)      INPUTFILE=${OPTARG};; 
+       *)      echo "Usage: $SCRIPTNAME -w [VALUE] -c [VALUE] -p [FILE PATH] or Use Help --help " 
+               exit 3 
+               ;; 
+       esac 
+done
+
+# Input File Verification.
+#######################################################
+
+if [ -f "$INPUTFILE" ]
+then
+	FILE="$INPUTFILE"
+else
+	echo "$INPUTFILE: No such file or directory..."
+        exit 3
+fi
+
+# Main Logic.
+#######################################################
+
+if [ "$FILE" == "$FILE" ]
+then
+        COUNT1=$(cat $FILE | egrep 'error|ERROR' |wc -l)
+fi
+
+if [ "$COUNT1" == "" ]
+then
+	COUNT="0";
+else
+	COUNT="$COUNT1"
+fi
+
+#######################################################
+
+OUTPUT="Error count is $COUNT"
+
+#######################################################
+
+if [ "$COUNT" -le "$WARN" ]
+then
+        STATUS="OK";
+        EXITSTAT=0;
+
+elif [ "$COUNT" -gt "$WARN" ]
+	then
+        	if [ "$COUNT" -ge "$CRIT" ]
+        	then
+                	STATUS="CRITICAL";
+                	EXITSTAT=2;
+        	else
+                	STATUS="WARNING";
+                	EXITSTAT=1;
+        	fi
+else
+        STATUS="UNKNOWN";
+        EXITSTAT=3;
+fi
+
+echo "$STATUS - $OUTPUT | ErrorCount=$COUNT;$WARN;$CRIT" 
+
+exit $EXITSTAT
+#End Main Logic.
+#######################################################

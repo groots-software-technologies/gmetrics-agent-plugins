@@ -1,0 +1,109 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check server health and process using gmetrics plugins.
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# Usage Details
+#######################################################
+if [ "${1}" = "--help" -o "${#}" != "2" ];
+       then
+       echo -e "Usage: $SCRIPTNAME -d [Domain Name]
+
+        OPTION          DESCRIPTION
+        ----------------------------------
+        --help                  Help
+        -d [Domain Name]      	Input Domain Name.
+        ----------------------------------
+
+        Use: ./$SCRIPTNAME -d \"test.in\"
+
+Note : Domain Name Should be in double quote";
+exit 3;
+fi
+
+# Get user-given variables
+#######################################################
+
+while getopts "d:" OPT
+do
+        case $OPT in
+        d) DOMAINNAME="$OPTARG" ;;
+        *) echo "USAGE : $SCRIPTNAME -d [Domain Name]"
+           echo "EXAMPLE : $SCRIPTNAME -d \"test.in\"" ;;
+        esac
+done
+
+##############################################################################################
+# Input keyword does not empty.
+if [ -z "$DOMAINNAME" ]
+then
+        echo "Domain Name Field Is Empty."
+        echo "Usage: $SCRIPTNAME -d [Domain Name] or Use Help --help "
+        exit 3;
+else
+        DOMAINNAME=$DOMAINNAME
+fi
+
+#######################################################
+#   Main Logic
+#######################################################
+
+# Gather Domain MX record
+#######################################################
+/usr/bin/nslookup -type=mx "$DOMAINNAME" >/dev/null
+MXRETVAL=`echo "$?"`
+
+# Gather Domain TXT record
+#######################################################
+/usr/bin/nslookup -type=txt "$DOMAINNAME" >/dev/null
+TXTRETVAL=`echo "$?"`
+
+#######################################################
+# Compare both command output 
+#######################################################
+
+if [ $MXRETVAL == 0 ] && [ $TXTRETVAL == 0  ]
+then
+    STATUS="OK";
+    EXIT=0;
+    STATUSOUTPUT=""$DOMAINNAME" MX and TXT Records Available"
+
+elif  [ $MXRETVAL != 0 ] && [ $TXTRETVAL != 0  ]
+then
+    STATUS="CRITICAL";
+    EXIT=2;
+    STATUSOUTPUT=""$DOMAINNAME" MX and TXT Records not Available"
+else
+    STATUS="UNKNOWN";
+    EXIT=3;
+fi
+
+if [ "$STATUS" = "UNKNOWN" ]
+        then
+                echo "$STATUS- No data Found"
+else
+        echo "$STATUS - $STATUSOUTPUT | MX_TXT=${EXIT}"c";1;2;0;"
+fi
+exit $EXIT
+# End Main Logic.
+#######################################################

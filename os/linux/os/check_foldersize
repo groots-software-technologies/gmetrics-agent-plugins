@@ -1,0 +1,201 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check server health and process using gmetrics plugins.
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# type command is checking whether bc command present or not.
+#######################################################
+type bc >/dev/null 2>&1 || { echo >&2 "This plugin require "bc" package, but it's not installed. Aborting."; exit 1; }
+
+# Usage details
+#######################################################
+
+if [ "${1}" = "--help" -o "${#}" != "8" ]
+       then
+       echo -e "Usage: $SCRIPTNAME -f [File Path] -s (k|m|g) -w [VALUE] -c [VALUE]
+
+        OPTION          DESCRIPTION
+        ----------------------------------
+        --help              Help
+	-f [Path]       Directory Path
+	-s [OUTPUT]     k - KB, m- MB, g- GB
+	-w [VALUE]      Warning Size
+	-c [VALUE]      Critical Size
+        ----------------------------------
+
+        Usage: ./$SCRIPTNAME -f /var/log/ -s m -w 40 -c 50
+
+Note : [VALUE] must be an integer.";
+       exit 3;
+fi
+
+#######################################################
+# Main Logic
+#######################################################
+
+folder=`pwd` 
+divisor=1
+unidad="KB"
+warning=0
+critical=0
+BC=/usr/bin/bc
+
+#######################################################
+FOLDER(){
+  if [ -d "$1" ];then folder=$1 && return;else
+  echo "ERROR: Folder is invalid"
+  exit 1
+  fi
+  folder=$1
+  return	
+}
+
+MU(){
+ case "$1" in
+	[Kk])
+	  divisor=1
+	  unidad="KB"
+	  return
+	;;
+	[Mm])
+	  divisor=1024
+	  unidad="MB"
+	  return
+	;;
+	[Gg])
+	  divisor=1048576/1048576
+	  unidad="GB"
+	  return
+	;;
+	*)
+	 echo "Please use:"
+	 echo "k for Kilobytes(KB) data"
+         echo "m for Megabytes (MB) data"
+	 echo "g for Gigabytes (GB) data"
+	 exit 3
+ esac
+}
+
+#######################################################
+# Get user-given variables
+#######################################################
+
+
+while (( $# )); do
+
+case "$1" in
+	-f)
+		FOLDER $2	
+	;;
+	-s)
+		MU $2
+	;;
+	-w)
+		declare -i warning=$2
+		w0="0"
+	if [ $warning -gt 0 ];then 
+		w0="1"
+	fi
+	;;
+	-c)
+		declare -i critical=$2
+	c0="0"
+	if [ $critical -gt 0 ];then
+	        c0="2"
+        fi
+	;;
+   esac
+ 	shift
+done
+#######################################################
+
+size=`du -k --max-depth=0 $folder|tail -1 |awk -v DIVISOR=$divisor '{print $1/DIVISOR}'`
+
+OK(){
+	echo "OK: Folder size is $size$unidad|size=$size$unidad;$warning;$critical"
+	exit 0
+}
+
+WARNING(){
+	echo "WARNING: Folder size is $size$unidad|size=$size$unidad;$warning;$critical"
+	exit 1
+}
+
+CRITICAL(){
+	echo "CRITICAL: Folder size is $size$unidad|size=$size$unidad;$warning;$critical"
+	exit 2
+}
+
+#######################################################
+
+let var0=$(($critical>$warning?0:4))
+let var1=$(($c0+$w0+$var0))
+let var2=$((`echo "$size>$warning"|$BC`))
+let var3=$((`echo "$size>$critical"|$BC`))
+
+#######################################################
+case $var1 in
+	0)
+		OK
+	;;
+	1)
+		if (( $var2 == 1 )); then
+		WARNING
+	else
+		OK
+	fi
+	;;
+	2)
+		if (( $var3 == 1 )); then
+        		CRITICAL
+	        else
+		        OK
+	        fi
+	;;
+	3)
+		if (( $var3 == 1 )); then
+		        CRITICAL
+	        elif (( $var2 == 1 )); then
+        		WARNING
+		else
+			OK
+	        fi
+	;;
+	5)
+        	if (( $var2 == 1 )); then
+		        WARNING
+	        else
+        		OK
+        	fi
+	;;
+	h)
+		echo "Usage: ./$SCRIPTNAME -f /var/log/ -s m -w 40 -c 50"	
+		exit 3
+	;;
+	help)
+		echo "Usage: ./$SCRIPTNAME -f /var/log/ -s m -w 40 -c 50"
+		exit 3
+
+esac
+#End main logic
+#######################################################

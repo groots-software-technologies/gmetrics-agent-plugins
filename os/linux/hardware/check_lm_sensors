@@ -1,0 +1,137 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check server health and process using gmetrics plugins.
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# type command is checking whether "nmap-ncat", ncat command present or not.
+#######################################################
+type sensors >/dev/null 2>&1 || { echo >&2 "This plugin require \"lm_sensors\" package, but it's not installed. Aborting."; exit 3; }
+type hddtemp >/dev/null 2>&1 || { echo >&2 "This plugin require \"hddtemp\" package, but it's not installed. Aborting."; exit 3; }
+
+# Usage Details
+#######################################################
+
+if [ "${1}" = "--help" -o "${#}" != "6" ]
+       then
+       echo -e "Usage: $SCRIPTNAME -s [Sensors] -w [Warn Threshold] -c [Critical Threshold]
+
+        OPTION          DESCRIPTION
+        ----------------------------------
+        --help          Help
+        -s              Sensors Name For monitoring.
+        -w		Warn Threshold in Celsius.
+	-c		Critical Threshold in Celsius.
+        ----------------------------------
+
+        Usage: ./$SCRIPTNAME -s \"fan2\" -w 70 -c 90
+	
+	Note : Sensor name should be in double \"fan2\" quote. "
+
+echo -e "\e[34m"
+echo "Please refer following sensors list which is present on your system."
+echo ""
+sensors | awk -F ":" '{print $1}' | egrep -v "^$|Adapter|nct6775-isa-0290|intrusion0|coretemp-isa-0000|cpu0_vid"
+echo -e "\e[39m" ; echo -e "\e[31m"
+echo "#######################################################"
+echo "Please add one sensor details in this plugin to monitor that sensor in monitoring tool."
+echo "Use usage --help or -h for more information"
+echo "#######################################################"
+echo -e "\e[39m"
+        exit 3;
+fi
+
+# Get user-given variables
+#######################################################
+while getopts "s:w:c:" options
+do
+    case $options in
+        s) SENSORS=$OPTARG ;;
+        w) WARN=$OPTARG ;;
+        c) CRIT=$OPTARG ;;
+        *) echo "Usage: $SCRIPTNAME -s [Sensors] -w [Warn Threshold] -c [Critical Threshold] or Use Help --help"
+            exit 3 ;;
+    esac
+done
+
+#######################################################
+if [ ${WARN} -gt ${CRIT} ]
+then
+        echo "ERROR : Warning threshold must be less than Critical threshold."
+        exit 3
+else
+        WARN=$WARN
+fi
+
+#######################################################
+# Main Logic
+#######################################################
+
+SENSORS="$SENSORS"
+if [[ $SENSORS == *"dev"* ]]; then
+  CMD=`hddtemp $SENSORS | awk -F ":" '{print $3}' | sed 's/[+,°,C]//g' | sed 's/ //g'`
+  EXT="Celsius"
+else
+  CMD=`sensors | grep "$SENSORS" | awk -F ":" '{print $2}'| awk -F " " '{print $1}'| sed 's/[+,°,C]//g'`
+  EXT=`sensors | grep "$SENSORS"`
+fi
+
+case $EXT in
+*C*)
+        EXT="Celsius";;
+*V*)
+        EXT="Volt";;
+*R*)
+        EXT="RPM";;
+*)
+        EXT="UNKNOWN";;
+esac
+
+#######################################################
+OUTPUT="Sensor $SENSORS reading is $CMD and measurement in $EXT."
+#######################################################
+VALUE=`echo $CMD | cut -d "." -f 1`
+
+if [ ${VALUE} -le ${WARN} ]
+then
+        STATUS="OK";
+        EXITSTAT=0;
+elif [ ${VALUE} -ge ${WARN} ]
+then
+        if [ ${VALUE} -gt ${CRIT} ]
+        then
+                STATUS="CRITICAL";
+                EXITSTAT=2;
+        else
+                STATUS="WARNING";
+                EXITSTAT=1;
+        fi
+else
+        STATUS="UNKNOWN";
+        EXITSTAT=3;
+fi
+
+echo "$STATUS- $OUTPUT | Reading=$CMD"$EXT";$WARN;$CRIT"
+exit $EXITSTAT
+
+# End Main Logic.
+#######################################################

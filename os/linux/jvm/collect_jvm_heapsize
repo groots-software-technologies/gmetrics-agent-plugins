@@ -1,0 +1,137 @@
+#!/bin/bash
+########################################################
+# Program: To check JVM java heap memory used by the process
+#
+# Purpose:
+#  This script extracts java metrics through jstat utility
+#  can be run in interactive.
+#
+#
+# Using jstat to extract values maximum 'heap' and 'perm' sizes.
+# What is called 'heap' here is the edden + old generation space,
+########################################################
+
+# Set script name
+########################################################
+SCRIPTNAME=$(basename $0)
+
+# Import Hostname
+########################################################
+HOSTNAME=$(hostname)
+
+if [ "${1}" = "--help" -o "${#}" != "2" ];
+then
+echo -e "
+OPTION                   DESCRIPTION
+-----------------------------------------
+--help                   Help
+-p [java path]           java home path
+-----------------------------------------
+Usage: ./$SCRIPTNAME  -p [java home path]
+NOTE: Mention java home path ";
+exit 3;
+fi
+
+
+#########################################################
+# Get user-given variables
+#########################################################
+
+while getopts "p:" Input;
+do
+case ${Input} in
+p) JAVAPATH=${OPTARG};;
+*) echo "Usage: $SCRIPTNAME -p [java path]"
+exit 3;
+;;
+esac
+done
+
+# Jvm heapsize log file path
+#########################################################
+
+LOGDIR=/var/log/groots/metrics/
+LOGFILE=$LOGDIR/"$SCRIPTNAME".log
+
+if [ ! -d $LOGDIR ]
+then
+    mkdir -p $LOGDIR
+elif [ ! -f $LOGFILE ]
+then
+    touch $LOGFILE
+fi
+
+# Verifying java path
+#######################################################
+
+if [ ! -d "$JAVAPATH" ]; then
+  echo "Java path directory does not exist. "
+  exit 3;
+fi
+
+
+#######################################################
+# Main Logic
+#######################################################
+
+# Collecting the java running pids
+#######################################################
+
+APPPIDS=`$JAVAPATH/bin/jps | grep -v Jps | awk '{print $1}' 2>/dev/null`
+
+# Declare array
+#######################################################
+
+HEAPARR=( )
+
+for APPPID in ${APPPIDS[@]}
+do
+
+USERNAME=`ps -o user= -p $APPPID`
+
+# Verifying availability of java process
+#######################################################
+
+if [ -z "$APPPIDS" ]; then
+echo "UNKNOWN: No (or multiple) java apps found"
+exit 3;
+fi
+
+# 'heap' here is the edden + old generation space, Heap calculation
+#######################################################
+
+JVM_CMD_HEAP="sudo -u $USERNAME $JAVAPATH/bin/jstat"
+
+GCCAPACITY=$( $JVM_CMD_HEAP  -gccapacity $APPPID | tail -1 | sed -e 's/[ ][ ]*/ /g')
+set -- $GCCAPACITY
+YGCMX=$(($(expr "${2}" : '\([0-9]\+\)')*1024))
+OGCMX=$(($(expr "${8}" : '\([0-9]\+\)')*1024))
+PGCMX=$(($(expr "${12}" : '\([0-9]\+\)')*1024))
+HEAPMX=$((($YGCMX + $OGCMX) / 1024))
+
+RESULT=$( ( $JVM_CMD_HEAP -gc $APPPID 2>/dev/null) | tail -n 1 | awk '{split($0,a," "); sum=a[3]+a[4]+a[6]+a[8]; print sum/1024}' | cut -d. -f1 ) 2>/dev/null
+
+TOTALHEAP=$(($HEAPMX / 1024 ))
+USEDHEAP=$((($RESULT) * 100 / $TOTALHEAP ))
+HEAPARR=( "${HEAPARR[@]}" "$USEDHEAP;$APPPID;$TOTALHEAP;$RESULT;$USERNAME" )
+
+done
+
+# Sorting the array in descending order
+#######################################################
+
+HEAPARR=( $(printf "%s\n" ${HEAPARR[@]} | sort -nr ) )
+
+HEADUSED=`echo "${HEAPARR[0]}" | awk -F ";" '{print $1}'`
+HEAPPID=`echo "${HEAPARR[0]}" | awk -F ";" '{print $2}'`
+HEAPTOTAL=`echo "${HEAPARR[0]}" | awk -F ";" '{print $3}'`
+HEAPUSED_MB=`echo "${HEAPARR[0]}" | awk -F ";" '{print $4}'`
+
+#######################################################
+printf "JVMPID=$HEAPPID\nTOTALHEAP=$HEAPTOTAL\nUSEDHEAP_MB=$HEAPUSED_MB\nUSEDHEAP_PER=$HEADUSED\n" > $LOGFILE
+#######################################################
+
+# End main logic
+#######################################################
+
+

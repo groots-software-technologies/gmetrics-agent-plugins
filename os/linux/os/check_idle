@@ -1,0 +1,112 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check server health and process using gmetrics plugins.
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# type command is checking whether sar command present or not.
+#######################################################
+type sar >/dev/null 2>&1 || { echo >&2 "This plugin require "sysstat" package, but it's not installed. Aborting."; exit 1; }
+
+# Usage Details
+#######################################################
+if [ "${1}" = "--help" -o "${#}" != "4" ]
+       then
+       echo -e "Usage: $SCRIPTNAME -w [VALUE] -c [VALUE]
+
+        OPTION          DESCRIPTION
+        ----------------------------------
+        -h              Help
+        -w [VALUE]      Warning Threshold Value in %
+        -c [VALUE]      Critical Threshold Value in %
+        ----------------------------------
+	Use: $SCRIPTNAME -w 15 -c 10
+
+Note : [VALUE] must be an integer."
+        exit 3;
+fi
+
+##################################################
+# Get user-given variables
+##################################################
+
+while getopts "w:c:" OPT
+do
+        case $OPT in
+        w) warn="$OPTARG" ;;
+        c) crit="$OPTARG" ;;
+        *) echo "Usage: $SCRIPTNAME -w [VALUE] -c [VALUE] or Use Help --help"
+		exit 3
+		;;
+        esac
+done
+ 
+#######################################################
+if [ $warn -lt $crit ]
+then
+        echo "Warning threshold value is less than critical threshold."
+aCRIPTNAME=`basename $0`
+        echo "Usage: $SCRIPTNAME -w [VALUE] -c [VALUE] or Use Help --help "
+        exit 3;
+else
+        warn=$warn
+fi 
+
+#######################################################
+# Main Logic
+#######################################################
+
+SAR_OUTPUT=`sar 1 1 | grep -i average`
+
+IDLE=`echo $SAR_OUTPUT | awk '{print $8}'`
+
+INTIDLE=`echo $IDLE | cut -d "." -f 1`
+
+if [ "$INTIDLE" -gt "$warn" ]
+then
+    STATUS="OK";
+    EXIT=0;
+elif [ "$INTIDLE" -le "$warn" ]
+then
+    if [ "$INTIDLE" -eq "$crit" ]
+    
+then
+    STATUS="CRITICAL";
+    EXIT=2;
+    else
+    STATUS="WARNING";
+    EXIT=1;
+    fi
+else
+    STATUS="UNKNOWN";
+    EXIT=3;
+fi
+
+if [ $STATUS = "UNKNOWN" ]
+	then
+		echo "$STATUS- No data" 
+else
+	echo "$STATUS- idle=${IDLE}%|idle=${IDLE}%;$warn;$crit;0;100"
+fi
+exit $EXIT
+#End Main Logic.
+#######################################################

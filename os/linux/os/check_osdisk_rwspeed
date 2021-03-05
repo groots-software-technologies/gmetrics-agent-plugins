@@ -1,0 +1,187 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check server health and process using gmetrics plugins.
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# Usage details
+#######################################################
+
+if [ "${1}" = "--help" -o "${1}" = "-h" -o "${#}" != "10" ];
+       then
+       echo -e "Usage: ./$SCRIPTNAME -p/--path [PARTITION PATH] -ww/--writewarning [VALUE] -wc/--writecritical [VALUE] -rw/--readwarning [VALUE] -rc/--readcritical [VALUE]
+        OPTION          	DESCRIPTION
+        ----------------------------------
+        -h/--help                  Help
+        -p/--path   		Remote Directory Partition Path.
+        -ww/--writewarning      Disk Write Warning Threshold In Seconds.
+        -wc/--writecritical     Disk Write Critical Threshold In Seconds.
+        -rw/--readwarning       Disk Read Warning Threshold In Seconds.
+        -rc/--readcritical      Disk Read Critical Threshold In Seconds.
+        ----------------------------------
+        Usage: ./$SCRIPTNAME -p/--path \"/mnt/\" -ww/--writewarning 1.3 -wc/--writecritical 1.5 -rw/--readwarning 0.5 -rc/--readcritical 1.2
+	Usage: ./$SCRIPTNAME -p \"/mnt/\" -ww 1.3 -wc 1.5 -rw 0.5 -rc 1.2
+
+Note : [VALUE] must be an floating point.";
+        exit 3;
+fi
+
+# Get user-given variables
+#######################################################
+POSITIONAL=()
+while [ $# -gt 0 ]
+do
+ARGS="$1"
+
+case $ARGS in
+    -p|--path)
+    DISKPATH="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    -ww|--writewarning)
+    WRITEWARNING="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    -wc|--writecritical)
+    WRITECRITICAL="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    -rw|--readwarning)
+    READWARNING="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    -rc|--readcritical)
+    READCRITICAL="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    *)    # unknown option
+    echo "Usage: $SCRIPTNAME -p/--path \"/mnt/\" -ww/--writewarning 1.3 -wc/--writecritical 1.5 -rw/--readwarning 0.5 -rc/--readcritical 1.2"
+    POSITIONAL+=("$1") # save it in an array for later
+    shift # past argument
+    ;;
+esac
+done
+
+# It will check the given string is integer or float.
+#######################################################
+array=( $WRITEWARNING $WRITECRITICAL $READWARNING $READCRITICAL )
+for VALUE in "${array[@]}"
+do
+echo "$VALUE" | grep "^[0-9]*[.][0-9]*$" > /dev/null
+VAL=`echo $?`
+if [[ $VAL == 0 ]]
+then
+        echo "Given string is $VALUE float" > /dev/null
+else
+        echo "Given string $VALUE is not float, Use Help --help for more details or see Usage."
+        echo "Usage: ./$SCRIPTNAME -p "/mnt/" -ww 1.3 -wc 1.5 -rw 0.5 -rc 1.2"
+        exit 3;
+fi
+done
+
+# Warn And Critical Value Comaparison.
+#######################################################
+if [[ $WRITEWARNING > $WRITECRITICAL ]] || [[ $READWARNING > $READCRITICAL ]]
+then
+        echo "Warning value must be less than Critical Value or Use Help --help"
+        exit 3
+else
+	WRITEWARNING=$WRITEWARNING 
+	WRITECRITICAL=$WRITECRITICAL 
+	READWARNING=$READWARNING 
+	READCRITICAL=$READCRITICAL
+fi
+
+# Input path validation.
+#######################################################
+
+if [ -d "$DISKPATH" ]
+then
+       DISKPATH="$DISKPATH"
+else
+        echo "$DISKPATH: No such Input file or directory..."
+        echo "Usage: ./$SCRIPTNAME -p "/mnt/" -ww 1.3 -wc 1.5 -rw 0.5 -rc 1.2 or use -h or --help"
+        exit 3
+fi
+
+#######################################################
+#Main Logic
+#######################################################
+
+# Write Speed.
+#######################################################
+COMMANDWRITE=`dd if=/dev/zero of="$REMOTEPATH"/testfile bs=16k count=16384 2>&1`
+WRITETIME=`echo "$COMMANDWRITE" | tail -n1 | cut -d ',' -f2 | sed 's/ //g' | sed 's/s$//g'`
+WRITESPEED=`echo "$COMMANDWRITE" | tail -n1 | cut -d ',' -f3 | sed 's/ //g'`
+
+# Read Speed.
+#######################################################
+COMMANDREAD=`dd if="$REMOTEPATH"/testfile of=/dev/null bs=16k 2>&1`
+READTIME=`echo "$COMMANDREAD" | tail -n1 | cut -d ',' -f2 | sed 's/ //g' | sed 's/s$//g'`
+READSPEED=`echo "$COMMANDREAD" | tail -n1 | cut -d ',' -f3 | sed 's/ //g'`
+
+# Remove Created file.
+#######################################################
+rm -rf "$REMOTEPATH"/testfile
+
+#######################################################
+OUTPUT="Disk Write time $WRITETIME Sec And Disk Speed $WRITESPEED, Disk Read time $READTIME And Disk Speed $READSPEED"
+#######################################################
+
+# Logic Function.
+#######################################################
+if [[ $WRITETIME < $WRITEWARNING ]] && [[ $READTIME < $READWARNING ]]
+then
+        STATUS="OK";
+        EXITSTAT=0;
+
+elif [[ $WRITETIME > $WRITEWARNING ]] || [[ $READTIME > $READWARNING ]]
+        then
+                if [[ $WRITETIME > $WRITECRITICAL ]] || [[ $READTIME > $READCRITICAL ]]
+                then
+                        STATUS="CRITICAL";
+                        EXITSTAT=2;
+                else
+                        STATUS="WARNING";
+                        EXITSTAT=1;
+                fi
+else
+        STATUS="UNKNOWN";
+        EXITSTAT=3;
+fi
+
+if [ $STATUS = "UNKNOWN" ]
+then
+	echo "$STATUS- No data found"
+else
+	echo "$STATUS - $OUTPUT | WriteTime=${WRITETIME}"s";${WRITEWARNING};${WRITECRITICAL} ReadTime=${READTIME}"s";${READWARNING};${READCRITICAL}"
+fi
+
+exit $EXIT
+# End Main Logic.
+#######################################################
+

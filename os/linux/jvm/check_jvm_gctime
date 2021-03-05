@@ -1,0 +1,110 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose: To calculate % of time used by JVM for garbage collection
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# Usage details
+#######################################################
+if [ "${1}" = "--help" -o "${#}" != "4" ];
+then
+echo -e "
+OPTION          DESCRIPTION
+----------------------------------
+--help                  Help
+-w [VALUE]      Warning threshold
+-c [VALUE]      Critical threshold 
+----------------------------------
+Usage: ./$SCRIPTNAME  -w [Warning threshold] -c [Critical threshold].";
+exit 3;
+fi
+
+#######################################################
+# Get user-given variables
+#######################################################
+
+while getopts "w:c:" OPT
+do
+        case $OPT in
+        w) WARN="$OPTARG" ;;
+        c) CRIT="$OPTARG" ;;
+        *) echo "Usage: $SCRIPTNAME  -w [Warning threshold] -c [Critical threshold]"
+        exit 3
+        ;;
+        esac
+done
+
+# Main logic
+#######################################################
+
+# Verifying thresholds
+#######################################################
+
+if [ $WARN -gt $CRIT ]
+then
+        echo "Warning value must be less than Critical Value or Use Help --help"
+        exit 3;
+fi
+
+# Jvm garbage collection log path
+#######################################################
+
+GCLOGFILE=/var/log/groots/metrics/collect_jvm_gctime.log
+
+PID=`cat $GCLOGFILE | grep "JVMPID" |  awk -F "=" '{print $2}'`
+GCTIME=`cat $GCLOGFILE | grep "GCTIME_TOTAL_SEC" |  awk -F "=" '{print $2}'`
+JVMTIME_TOTAL=`cat $GCLOGFILE | grep "JVM_TOTAL_SEC" |  awk -F "=" '{print $2}'`
+GCTIMEUSED_PER=`cat $GCLOGFILE | grep "GCTIME_PER" |  awk -F "=" '{print $2}'`
+
+#######################################################
+OUTPUT="JVM PID=$PID, Total Time=$JVMTIME_TOTAL secs, Garbage Collection=$GCTIME secs, $GCTIMEUSED_PER"%" | Gctime=${GCTIMEUSED_PER}"%";$WARN;$CRIT;"
+#######################################################
+
+if [ "$GCTIMEUSED_PER" -le "$WARN" ]
+then
+        STATUS="OK";
+        EXITSTAT=0;
+
+elif [ "$GCTIMEUSED_PER" -gt "$WARN" ]
+        then
+                if [ "$GCTIMEUSED_PER" -gt "$CRIT" ]
+                then
+                        STATUS="CRITICAL";
+
+                        EXITSTAT=2;
+                else
+                        STATUS="WARNING";
+                        EXITSTAT=1;
+                fi
+else
+        STATUS="UNKNOWN";
+        EXITSTAT=3;
+fi
+
+if [ "$STATUS" = "UNKNOWN" ]
+then
+        echo "$STATUS- No data Found."
+fi
+
+echo "$STATUS - $OUTPUT "
+exit $EXITSTAT
+
+# End main logic
+#######################################################

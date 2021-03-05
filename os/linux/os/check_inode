@@ -1,0 +1,108 @@
+#!/bin/bash
+#######################################################
+# Program: Gmetrics monitoring plugins listing.
+#
+# Purpose:
+#  Check server health and process using gmetrics plugins.
+#  can be run in interactive.
+#
+# License:
+#  This program is distributed in the hope that it will be useful,
+#  but under groots software technologies @rights.
+#
+#######################################################
+
+# Check for people who need help - aren't we all nice ;-)
+#######################################################
+
+#Set script name
+#######################################################
+SCRIPTNAME=`basename $0`
+
+# Import Hostname
+#######################################################
+HOSTNAME=$(hostname)
+
+# Usage Details
+#######################################################
+
+if [ "${1}" = "--help" -o "${#}" != "6" ];
+       then
+       echo -e "Usage: $SCRIPTNAME -p [Path] -w [VALUE] -c [VALUE]
+
+        OPTION          DESCRIPTION
+        ----------------------------------
+        --help          Help
+        -p [Path]       Mount Point Name
+	-w [VALUE]      Warning Threshold Value in % 
+        -c [VALUE]      Critical Threshold Value in %
+        ----------------------------------
+
+        Usage: ./$SCRIPTNAME -p \"/root\" -w 80 -c 90
+
+Note : [VALUE] must be an integer.";
+       exit 3;
+fi
+
+#######################################################
+# Get user-given variables
+#######################################################
+
+while getopts "p:w:c:" OPT
+do
+        case $OPT in
+        p) MNT="$OPTARG" ;;
+        w) WARN="$OPTARG" ;;
+        c) CRIT="$OPTARG" ;;
+        *) echo "Usage: ./$SCRIPTNAME -p /root -w 80 -c 90" 
+		exit 3
+		;;
+        esac
+done
+
+#######################################################
+if [ ${WARN} -gt ${CRIT} ]
+then
+        echo "ERROR : Warning threshold must be less than Critical threshold."
+        exit 3
+else
+	WARN=$WARN
+fi
+
+#######################################################
+# Main logic
+#######################################################
+
+DF=`df -ih $MNT | grep -iv "Filesystem"`
+TOTAL=`echo $DF | awk '{print $2}'`
+USED=`echo $DF | awk '{print $3}'`
+AVAIL=`echo $DF | awk '{print $4}'`
+PER=`echo $DF | awk '{print $5}' | tr -d "%"`
+
+#######################################################
+OUTPUT=`echo "$MNT :TotalInodes="$TOTAL", UsedInodes="$USED", FreeInodes="$AVAIL`
+#######################################################
+
+if [ ${PER} -le ${WARN} ]
+then
+        STATUS="OK";
+        EXITSTAT=0;
+elif [ ${PER} -ge ${WARN} ]
+then
+        if [ ${PER} -gt ${CRIT} ]
+        then
+                STATUS="CRITICAL";
+                EXITSTAT=2;
+        else
+                STATUS="WARNING";
+                EXITSTAT=1;
+        fi
+else
+        STATUS="UNKNOWN";
+        EXITSTAT=3;
+fi
+
+echo "$STATUS- $OUTPUT,Total-Used-Inodes=$PER"%" | Total-Inodes-Usage=$PER"%";$WARN;$CRIT" 
+exit $EXITSTAT
+# End Main Logic.
+#######################################################
