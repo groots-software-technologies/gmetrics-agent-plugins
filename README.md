@@ -1,5 +1,6 @@
+# To add gmetrics-agent binary plugins to remote host 
 
-# Gmetrics-plugins, copy to "/groots/metrics/libexec"
+## Gmetrics-plugins, copy to "/groots/metrics/libexec"
 
 - To copy gmetrics plugins from git to remote host's /groots/metrics/libexec directory
 
