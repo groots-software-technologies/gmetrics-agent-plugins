@@ -48,14 +48,15 @@ while read line; do echo "[`date +"%Y-%m-%dT%H:%M:%S,%N" | rev | cut -c 7- | rev
 if [ "${1}" = "--help" -o "${#}" != "2" ];
 then
 echo -e "
+Usage: ./gmetrics_agent_plugin_add.sh -p [PLUGIN NAME]
 	Plugin list: sms, appsensors, aws, backup, dns, docker, elk, expiry, hardware, lamp, mithi, os, website, jvm, node, jenkins
-	OPTION                 DESCRIPTION
+	OPTION                      DESCRIPTION
 	-----------------------------------------
-	--help                   help
-	-p [plugin]            plugin name
+	--help          	    help
+	-p [PLUGIN NAME]            Gmetrics plugin name.
 	-----------------------------------------
 	Usage: sh $SCRIPTNAME  -p [plugin name]
-	Ex: sh addplugin.sh -p aws";
+	Ex: ./gmetrics_agent_plugin_add.sh -p os";
 	exit 3;
 fi
 
@@ -68,7 +69,7 @@ while getopts "p:" Input;
 do
         case ${Input} in
         p) PLUGINNAME=$OPTARG;; 
-        *) echo "Usage: $SCRIPTNAME -p [plugin name]"
+        *) echo "Usage: ./gmetrics_agent_plugin_add.sh -p [PLUGIN NAME]"
         exit 3;
         ;;
         esac
@@ -112,17 +113,7 @@ else
 	exit 1;
 fi
 
-# Collecting git username & password
-######################################################
-
-echo "#######################################################" | log
-echo -e -n "Enter git username: "
-read USERNAME
-
-echo "#######################################################" | log
-echo -e -n "Enter git Password: "
-read -s PASSWORD
-
+#######################################################
 for item in ${list[@]}; 
 do
 
@@ -134,7 +125,7 @@ do
 	#######################################################
 
 	SVNCMD="--non-interactive --no-auth-cache --username $USERNAME --password "$PASSWORD" $DEST"
-	GITPATH="svn checkout https://github.com/grootsadmin/gmetrics-plugins/trunk/os/linux"
+	GITPATH="svn checkout https://github.com/grootsadmin/gmetrics-agent-plugins/trunk/os/linux"
 	echo "#######################################################" | log
 	echo "Plugin "$PLUGINNAME" selected to add in \"$DEST\" " | log
 	$GITPATH/$PLUGINNAME $SVNCMD 2>/dev/null || { echo "Incorrect git credentials, Exiting now..." | log ; exit 1; }
@@ -146,7 +137,6 @@ break
 done 
 
 }
-
 
 # Function calling
 #######################################################
