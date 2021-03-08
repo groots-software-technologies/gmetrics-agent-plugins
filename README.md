@@ -1,6 +1,7 @@
 # To add gmetrics-agent binary plugins to remote host 
 
 ### These plugins are depends only Gmetrics Monitoring not applicable for other monitoring tool.
+For reference refer www.groots.in and for gmetrics login refer metrics.groots.in url.
 
 ### Help Usage & get plugin list to copy
 
