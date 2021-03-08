@@ -1,7 +1,7 @@
 # Gmetrics Hosts and service monitoring plugins.
 
 ### These plugins are depends only Gmetrics Monitoring not applicable for other monitoring tool.
-For reference refer www.groots.in and for gmetrics login refer metrics.groots.in url.
+For reference refer https://www.groots.in and for gmetrics login refer https://metrics.groots.in url.
 
 ### Help Usage & get plugin lists
 
