@@ -48,7 +48,7 @@ while read line; do echo "[`date +"%Y-%m-%dT%H:%M:%S,%N" | rev | cut -c 7- | rev
 if [ "${1}" = "--help" -o "${#}" != "2" ];
 then
 echo -e "
-	Plugin list: sms, appsensors, aws, backup, dns, docker, elk, expiry, hardware, lamp, mithi, os, website, jvm, node, jenkins
+	Plugin list: sms, appsensors, aws, backup, dns, docker, elk, expiry, hardware, lamp, mithi, os, website, jvm, node, jenkins, leaesline
 	OPTION                 DESCRIPTION
 	-----------------------------------------
 	--help                   help
@@ -97,7 +97,7 @@ copy_plugin () {
 # Plugin list for available plugins
 #######################################################
 
-list=("sms" "appsensors" "aws" "backup" "dns" "docker" "elk" "expiry" "hardware" "lamp" "mithi" "os" "website" "jvm" "node" "jenkins")
+list=("sms" "appsensors" "aws" "backup" "dns" "docker" "elk" "expiry" "hardware" "lamp" "mithi" "os" "website" "jvm" "node" "jenkins" "leaseline")
 PLUGINNAME=`echo "$PLUGINNAME" | sed -e 's/\(.*\)/\L\1/'`
 
 # Verify if plugin present or not
