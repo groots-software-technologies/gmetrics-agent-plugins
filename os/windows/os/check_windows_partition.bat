@@ -55,15 +55,15 @@ if %PERCENTUSED% GEQ %WARNING% goto WARN-1
 goto OK-0
 
 :CRITI-2
-echo CRITICAL - Drive %DRIVE%, Total space: !TotalGB!GB, Free space : !FreeGB!GB, Percent Used : %PERCENTUSED%^%%^| DriveUsed=%PERCENTUSED%^%%;%WARNING%;%CRITICAL%
+echo CRITICAL - Drive %DRIVE%, Total space: !TotalGB!GB, Free space : !FreeGB!GB, Percent Used : %PERCENTUSED%^%%^| Usage=%PERCENTUSED%^%%;%WARNING%;%CRITICAL%
 @Exit /b 2
 
 :WARN-1
-echo WARNING - Drive %DRIVE%, Total space: !TotalGB!GB, Free space : !FreeGB!GB, Percent Used : %PERCENTUSED%^%%^| DriveUsed=%PERCENTUSED%^%%;%WARNING%;%CRITICAL%
+echo WARNING - Drive %DRIVE%, Total space: !TotalGB!GB, Free space : !FreeGB!GB, Percent Used : %PERCENTUSED%^%%^| Usage=%PERCENTUSED%^%%;%WARNING%;%CRITICAL%
 @Exit /b 1
 
 :OK-0
-echo OK - Drive %DRIVE%, Total space: !TotalGB!GB, Free space : !FreeGB!GB, Percent Used : %PERCENTUSED%^%%^| DriveUsed=%PERCENTUSED%^%%;%WARNING%;%CRITICAL%
+echo OK - Drive %DRIVE%, Total space: !TotalGB!GB, Free space : !FreeGB!GB, Percent Used : %PERCENTUSED%^%%^| Usage=%PERCENTUSED%^%%;%WARNING%;%CRITICAL%
 @Exit /b 0
 
 :help
