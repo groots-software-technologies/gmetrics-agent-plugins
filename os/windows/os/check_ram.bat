@@ -68,15 +68,15 @@ if %UsedPercent% GEQ %WARNING% goto WARN-1
 goto OK-0
 
 :CRITI-2
-echo CRITICAL - Total memory: %TotalMemory% MB, Used memory: %UsedMemory% MB, Free memory: %AvailableMemory% MB^| Totalmemory=%TotalMemory%MB Usedmemory=%UsedMemory%MB Freememory=%AvailableMemory%MB
+echo CRITICAL - Total memory: %TotalMemory% MB, Used memory: %UsedMemory% MB, Free memory: %AvailableMemory% MB - %UsedPercent%^%%^| TotalRAM=%TotalMemory%MB Used=%UsedMemory%MB Free=%AvailableMemory%MB
 @Exit /b 2
 
 :WARN-1
-echo WARNING - Total memory: %TotalMemory% MB, Used memory: %UsedMemory% MB, Free memory: %AvailableMemory% MB^| Totalmemory=%TotalMemory%MB Usedmemory=%UsedMemory%MB Freememory=%AvailableMemory%MB
+echo WARNING - Total memory: %TotalMemory% MB, Used memory: %UsedMemory% MB, Free memory: %AvailableMemory% MB - %UsedPercent%^%%^| TotalRAM=%TotalMemory%MB Used=%UsedMemory%MB Free=%AvailableMemory%MB
 @Exit /b 1
 
 :OK-0
-echo OK - Total memory: %TotalMemory% MB, Used memory: %UsedMemory% MB, Free memory: %AvailableMemory% MB^| Totalmemory=%TotalMemory%MB Usedmemory=%UsedMemory%MB Freememory=%AvailableMemory%MB
+echo OK - Total memory: %TotalMemory% MB, Used memory: %UsedMemory% MB, Free memory: %AvailableMemory% MB - %UsedPercent%^%%^| TotalRAM=%TotalMemory%MB Used=%UsedMemory%MB Free=%AvailableMemory%MB
 @Exit /b 0
 
 :help
